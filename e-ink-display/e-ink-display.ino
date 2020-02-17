@@ -73,6 +73,11 @@ void setup() {
   // you're connected now, so print out the status:
   printWifiStatus();
 
+
+  sleep();
+
+
+
 }
 
 
@@ -90,6 +95,9 @@ void loop() {
     //coordinates to write every single pixel to screen
     int  x = 0;
     int  y = 0;
+
+
+    wakeUp(); //always wake display up on every request
 
     while (client.connected()) {
       if (client.available()) {
@@ -114,8 +122,8 @@ void loop() {
           else if (c == '3') { //3 means API is asking for current state
             client.println("HTTP/1.1 200 OK");
             client.println("Content-Type: text/html");
-            client.println("Hello API");
-            client.println("Connection: close");  // the connection will be closed after completion of the response
+            client.println();
+            client.println(getCurrentState());
             break;
           }
 
@@ -125,7 +133,9 @@ void loop() {
             x = 0;
             y++;
           }
-          if(x % 4 == 0)
+
+          //delay to kepp sure that image is displayed correctly
+          if (x % 4 == 0)
             DEV_Delay_ms(1);
         }
 
@@ -149,7 +159,6 @@ void loop() {
 
         //All bits recieved, so writing image to display and
         writeImageToDisplay();
-        sleep();
         break;
       }
     }
@@ -159,6 +168,8 @@ void loop() {
     // close the connection:
     client.stop();
     Serial.println("client disconnected");
+
+    sleep(); //putting display always to sleep after request finished
   }
 
 
@@ -166,7 +177,6 @@ void loop() {
 
 void printPixelToScreen(int x, int y) {
   Paint_DrawPoint(x, y, BLACK, DOT_PIXEL_DFT, DOT_STYLE_DFT);
-//  DEV_Delay_ms(3);
 }
 
 
@@ -178,9 +188,6 @@ void writeImageToDisplay() {
 }
 
 void clearDisplay() {
-  if (isSleeping)
-    wakeUp();
-
   Serial.println("Clear display");
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
   Paint_Clear(WHITE);
@@ -189,20 +196,45 @@ void clearDisplay() {
 }
 
 void sleep() {
-  EPD_7IN5_Sleep();
-  DEV_Delay_ms(2000);
-  isSleeping = true;
-  Serial.println("Display sleeping");
+  if (!isSleeping) {
+    EPD_7IN5_Sleep();
+    DEV_Delay_ms(2000);
+    isSleeping = true;
+    Serial.println("Display sleeping");
+  }
 }
 
 
 
 void wakeUp() {
-  DEV_Module_Init();
-  EPD_7IN5_Init();
-  DEV_Delay_ms(500);
-  isSleeping = false;
-  Serial.println("Display waked up");
+  if (isSleeping) {
+    DEV_Module_Init();
+    EPD_7IN5_Init();
+    DEV_Delay_ms(500);
+    isSleeping = false;
+    Serial.println("Display waked up");
+  }
+}
+
+String getCurrentState() {
+  String ret = String(isSleeping);
+  String separator = ";";
+  ret += separator;
+
+  ret += batteryState;
+  ret += separator;
+
+  ret += ipToString(WiFi.localIP());
+  
+  return ret;
+}
+
+String ipToString(IPAddress ip){
+  String s="";
+  for (int i=0; i<4; i++) {
+    s += i  ? "." + String(ip[i]) : String(ip[i]);
+  }
+  return s;
 }
 
 
