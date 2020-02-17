@@ -1,8 +1,8 @@
 /*
-  e-ink-display 
+  e-ink-display
 
   A simple web server that can show an image to the E-Ink Display or clear the screen.
-  
+
 
   created 18 Jnauray 2020
   by Simon Dalvai
@@ -10,7 +10,7 @@
 
 #include <SPI.h>
 #include <WiFiNINA.h>
-#include "EPD.h"
+#include "EPD_7in5.h"
 #include "GUI_Paint.h"
 #include "arduino_secrets.h"
 
@@ -19,11 +19,16 @@ char ssid[] = SECRET_SSID;        // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;                 // your network key Index number (needed only for WEP)
 
-
-int  x = 0;
-int  y = 0;
-
 int status = WL_IDLE_STATUS;
+
+
+//states of display
+boolean isSleeping = false;
+int batteryState = 100;
+String lastStateTimeStamp; //timestamp to save time of last state check by API
+String lastUpdateTimeStamp; //timestamp of last image update
+
+
 
 WiFiServer server(80);
 
@@ -82,6 +87,10 @@ void loop() {
     //to read content
     boolean content = false;
 
+    //coordinates to write every single pixel to screen
+    int  x = 0;
+    int  y = 0;
+
     while (client.connected()) {
       if (client.available()) {
         char c = client.read();
@@ -90,45 +99,40 @@ void loop() {
           Serial.write(c);
 
 
-        if (y == 380) {
-          x = 0;
-          y = 0;
-          EPD_7IN5_Display();
-          Serial.println("Write image done");
-          client.println("HTTP/1.1 200 OK");
-          client.println("Content-Type: text/html");
-          client.println("Connection: close");  // the connection will be closed after completion of the response
-          break;
-        }
-
-
         // read content
         if (content) {
-          if (c == '1')
-            Paint_DrawPoint(x, y, BLACK, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+          if (c == '1') {
+            printPixelToScreen(x, y);
+          }
           else if (c == '2') { // 2 means clear display
             clearDisplay();
-            x = 0;
-            y = 0;
             client.println("HTTP/1.1 200 OK");
             client.println("Content-Type: text/html");
             client.println("Connection: close");  // the connection will be closed after completion of the response
             break;
           }
+          else if (c == '3') { //3 means API is asking for current state
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-Type: text/html");
+            client.println("Hello API");
+            client.println("Connection: close");  // the connection will be closed after completion of the response
+            break;
+          }
+
+          //incrementing coordinates
           x++;
           if (x == 640) {
             x = 0;
             y++;
           }
+          if(x % 4 == 0)
+            DEV_Delay_ms(1);
         }
 
         if (c == '\n' && currentLineIsBlank) {
           // send a standard http response header
-          x = 0;
-          y = 0;
           content = true;
-          Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
-          Paint_Clear(WHITE);
+          clearDisplay();
         }
         if (c == '\n') {
           // you're starting a new line
@@ -137,6 +141,16 @@ void loop() {
           // you've gotten a character on the current line
           currentLineIsBlank = false;
         }
+      } else {
+        //Closing conncetion with client
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: text/html");
+        client.println("Connection: close");  // the connection will be closed after completion of the response
+
+        //All bits recieved, so writing image to display and
+        writeImageToDisplay();
+        sleep();
+        break;
       }
     }
     // give the web browser time to receive the data
@@ -146,14 +160,49 @@ void loop() {
     client.stop();
     Serial.println("client disconnected");
   }
+
+
+}
+
+void printPixelToScreen(int x, int y) {
+  Paint_DrawPoint(x, y, BLACK, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+//  DEV_Delay_ms(3);
+}
+
+
+void writeImageToDisplay() {
+  Serial.println("Write image to screen");
+  EPD_7IN5_Display();
+  DEV_Delay_ms(2000);
+  Serial.println("Write image to screen done");
 }
 
 void clearDisplay() {
+  if (isSleeping)
+    wakeUp();
+
   Serial.println("Clear display");
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
   Paint_Clear(WHITE);
   EPD_7IN5_Display();
   Serial.println("Clear display done");
+}
+
+void sleep() {
+  EPD_7IN5_Sleep();
+  DEV_Delay_ms(2000);
+  isSleeping = true;
+  Serial.println("Display sleeping");
+}
+
+
+
+void wakeUp() {
+  DEV_Module_Init();
+  EPD_7IN5_Init();
+  DEV_Delay_ms(500);
+  isSleeping = false;
+  Serial.println("Display waked up");
 }
 
 
