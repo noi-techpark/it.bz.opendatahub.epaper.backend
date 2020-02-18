@@ -25,9 +25,6 @@ int status = WL_IDLE_STATUS;
 //states of display
 boolean isSleeping = false;
 int batteryState = 100;
-String lastStateTimeStamp; //timestamp to save time of last state check by API
-String lastUpdateTimeStamp; //timestamp of last image update
-
 
 
 WiFiServer server(80);
@@ -218,13 +215,18 @@ void wakeUp() {
 
 String getCurrentState() {
   String ret = String(isSleeping);
-  String separator = ";";
+  String separator = ";"; //seaparator to be able to splut the string in API example: isSleeping;batteryState;IP;MAC => 0;92;192.168.1.10
   ret += separator;
 
   ret += batteryState;
   ret += separator;
 
   ret += ipToString(WiFi.localIP());
+  ret += separator;
+
+  byte mac[6];
+  WiFi.macAddress(mac);
+  ret += macToString(mac);
   
   return ret;
 }
@@ -233,6 +235,18 @@ String ipToString(IPAddress ip){
   String s="";
   for (int i=0; i<4; i++) {
     s += i  ? "." + String(ip[i]) : String(ip[i]);
+  }
+  return s;
+}
+
+String macToString(byte mac[]){
+ String s;
+  for (byte i = 0; i < 6; ++i)
+  {
+    char buf[3];
+    sprintf(buf, "%2X", mac[i]);
+    s += buf;
+    if (i < 5) s += ':';
   }
   return s;
 }
