@@ -24,6 +24,7 @@ int status = WL_IDLE_STATUS;
 
 //states of display
 boolean isSleeping = false;
+boolean hasImage = false;
 int batteryState = 100;
 
 
@@ -89,9 +90,14 @@ void loop() {
     //to read content
     boolean content = false;
 
+    //to save if display has been cleared before new image gets written
+    boolean isDisplayCleared = false;
+
+    
     //coordinates to write every single pixel to screen
     int  x = 0;
     int  y = 0;
+
 
 
     wakeUp(); //always wake display up on every request
@@ -107,10 +113,15 @@ void loop() {
         // read content
         if (content) {
           if (c == '1') {
+            if(!isDisplayCleared){
+              clearDisplay();
+              isDisplayCleared = true;
+            }
             printPixelToScreen(x, y);
           }
           else if (c == '2') { // 2 means clear display
             clearDisplay();
+            hasImage = false;
             client.println("HTTP/1.1 200 OK");
             client.println("Content-Type: text/html");
             client.println("Connection: close");  // the connection will be closed after completion of the response
@@ -137,9 +148,7 @@ void loop() {
         }
 
         if (c == '\n' && currentLineIsBlank) {
-          // send a standard http response header
           content = true;
-          clearDisplay();
         }
         if (c == '\n') {
           // you're starting a new line
@@ -149,13 +158,19 @@ void loop() {
           currentLineIsBlank = false;
         }
       } else {
+        //gets only triggered when writing new image
+        
         //Closing conncetion with client
         client.println("HTTP/1.1 200 OK");
         client.println("Content-Type: text/html");
         client.println("Connection: close");  // the connection will be closed after completion of the response
 
+        hasImage = true;
+
+        
         //All bits recieved, so writing image to display and
         writeImageToDisplay();
+        
         break;
       }
     }
@@ -215,11 +230,15 @@ void wakeUp() {
 
 String getCurrentState() {
   String ret = String(isSleeping);
-  String separator = ";"; //seaparator to be able to splut the string in API example: isSleeping;batteryState;IP;MAC => 0;92;192.168.1.10
+  String separator = ";"; //seaparator to be able to splut the string in API example: isSleeping;hasImage;batteryState;IP;MAC => 0;1;92;192.168.1.10
+  ret += separator;
+
+   ret += String(hasImage);
   ret += separator;
 
   ret += batteryState;
   ret += separator;
+  
 
   ret += ipToString(WiFi.localIP());
   ret += separator;
