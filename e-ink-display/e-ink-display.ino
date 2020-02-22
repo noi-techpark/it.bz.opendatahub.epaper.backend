@@ -63,6 +63,7 @@ void setup() {
     Serial.println(ssid);
     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
     status = WiFi.begin(ssid, pass); // remove pass if WIFI has no password
+    //    status = WiFi.begin(ssid);
 
     // wait 10 seconds for connection:
     delay(10000);
@@ -93,7 +94,7 @@ void loop() {
     //to save if display has been cleared before new image gets written
     boolean isDisplayCleared = false;
 
-    
+
     //coordinates to write every single pixel to screen
     int  x = 0;
     int  y = 0;
@@ -113,7 +114,7 @@ void loop() {
         // read content
         if (content) {
           if (c == '1') {
-            if(!isDisplayCleared){
+            if (!isDisplayCleared) {
               clearDisplay();
               isDisplayCleared = true;
             }
@@ -143,7 +144,7 @@ void loop() {
           }
 
           //delay to kepp sure that image is displayed correctly
-          if (x % 4 == 0)
+          if (x % 2 == 0)
             DEV_Delay_ms(1);
         }
 
@@ -159,7 +160,7 @@ void loop() {
         }
       } else {
         //gets only triggered when writing new image
-        
+
         //Closing conncetion with client
         client.println("HTTP/1.1 200 OK");
         client.println("Content-Type: text/html");
@@ -167,10 +168,10 @@ void loop() {
 
         hasImage = true;
 
-        
+
         //All bits recieved, so writing image to display and
         writeImageToDisplay();
-        
+
         break;
       }
     }
@@ -233,12 +234,12 @@ String getCurrentState() {
   String separator = ";"; //seaparator to be able to splut the string in API example: isSleeping;hasImage;batteryState;IP;MAC => 0;1;92;192.168.1.10
   ret += separator;
 
-   ret += String(hasImage);
+  ret += String(hasImage);
   ret += separator;
 
   ret += batteryState;
   ret += separator;
-  
+
 
   ret += ipToString(WiFi.localIP());
   ret += separator;
@@ -246,20 +247,20 @@ String getCurrentState() {
   byte mac[6];
   WiFi.macAddress(mac);
   ret += macToString(mac);
-  
+
   return ret;
 }
 
-String ipToString(IPAddress ip){
-  String s="";
-  for (int i=0; i<4; i++) {
+String ipToString(IPAddress ip) {
+  String s = "";
+  for (int i = 0; i < 4; i++) {
     s += i  ? "." + String(ip[i]) : String(ip[i]);
   }
   return s;
 }
 
-String macToString(byte mac[]){
- String s;
+String macToString(byte mac[]) {
+  String s;
   for (byte i = 0; i < 6; ++i)
   {
     char buf[3];
@@ -281,6 +282,26 @@ void printWifiStatus() {
   IPAddress ip = WiFi.localIP();
   Serial.print("IP Address: ");
   Serial.println(ip);
+
+  String ipString = ipToString(ip);
+  char ipBuff[ipString.length() + 2];
+  ipString.toCharArray(ipBuff, ipString.length() + 1);
+
+  byte mac[6];
+  WiFi.macAddress(mac);
+  String macString = macToString(mac);
+  char macBuff[macString.length() + 2];
+  macString.toCharArray(macBuff, macString.length() + 1);
+
+  Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
+  Paint_Clear(WHITE);
+
+  Paint_DrawString_EN(200, 150, ipBuff, &Font24, WHITE, BLACK);
+  Paint_DrawString_EN(200, 180, macBuff, &Font24, WHITE, BLACK);
+
+  EPD_7IN5_Display();
+
+
 
   // print the received signal strength:
   long rssi = WiFi.RSSI();
