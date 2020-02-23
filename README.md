@@ -3,6 +3,17 @@ The Arduino Development
 
 Code for Arduino UNO WIFI rev.2 Board to show images from the [e-ink-displays-api](https://github.com/noi-techpark/e-ink-displays-api) that can be controlled with the [e-ink-displays-webapp](https://github.com/noi-techpark/e-ink-displays-webapp).
 
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**
+
+- [Setup](#setup)
+    - [WPA](#wpa)
+    - [OPEN WIFI - NO PASSWORD](#open-wifi---no-password)
+    - [UPLOAD](#upload)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 # Setup
 Put SSID of Network you want to conncect to arduino_secrets.h
 ```
