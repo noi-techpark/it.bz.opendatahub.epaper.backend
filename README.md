@@ -23,14 +23,14 @@ Put SSID of Network you want to conncect to arduino_secrets.h
 Depending on the Security of the Wifi you want to connect change following lines of code
 
 ### WPA
-Add the password to arduino_secrets.h
+Add the password to config.h
 ```
 #define SECRET_PASS "YOUR_PASSWORD"
 ```
 ### OPEN WIFI - NO PASSWORD
-Remove pass parameter in line 62 of e-ink-display.ino
+Leave SECRET_PASS empty in config.h
 ```
-status = WiFi.begin(ssid);
+#define SECRET_PASS ""
 ```
 
 ### UPLOAD

@@ -12,7 +12,7 @@
 #include <WiFiNINA.h>
 #include "EPD_7in5.h"
 #include "GUI_Paint.h"
-#include "arduino_secrets.h"
+#include "config.h"
 
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = SECRET_SSID;        // your network SSID (name)
@@ -62,8 +62,10 @@ void setup() {
     Serial.print("Attempting to connect to SSID: ");
     Serial.println(ssid);
     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
-    status = WiFi.begin(ssid, pass); // remove pass if WIFI has no password
-    //    status = WiFi.begin(ssid);
+    if (sizeof(pass) > 0)
+      status = WiFi.begin(ssid, pass);
+    else
+      status = WiFi.begin(ssid);
 
     // wait 10 seconds for connection:
     delay(10000);
@@ -92,16 +94,12 @@ void loop() {
     boolean content = false;
 
     //to save if display has been cleared before new image gets written
-    boolean isDisplayCleared = false;
+    boolean isDisplayClearedAndWakedUp = false;
 
 
     //coordinates to write every single pixel to screen
     int  x = 0;
     int  y = 0;
-
-
-
-    wakeUp(); //always wake display up on every request
 
     while (client.connected()) {
       if (client.available()) {
@@ -114,15 +112,18 @@ void loop() {
         // read content
         if (content) {
           if (c == '1') {
-            if (!isDisplayCleared) {
+            if (!isDisplayClearedAndWakedUp) {
+              wakeUp();
               clearDisplay();
-              isDisplayCleared = true;
+              isDisplayClearedAndWakedUp = true;
             }
             printPixelToScreen(x, y);
           }
           else if (c == '2') { // 2 means clear display
+            wakeUp();
             clearDisplay();
             hasImage = false;
+            sleep();
             client.println("HTTP/1.1 200 OK");
             client.println("Content-Type: text/html");
             client.println("Connection: close");  // the connection will be closed after completion of the response
@@ -172,6 +173,7 @@ void loop() {
         //All bits recieved, so writing image to display and
         writeImageToDisplay();
 
+        sleep();
         break;
       }
     }
@@ -181,8 +183,6 @@ void loop() {
     // close the connection:
     client.stop();
     Serial.println("client disconnected");
-
-    sleep(); //putting display always to sleep after request finished
   }
 
 
@@ -296,8 +296,9 @@ void printWifiStatus() {
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
   Paint_Clear(WHITE);
 
-  Paint_DrawString_EN(200, 150, ipBuff, &Font24, WHITE, BLACK);
-  Paint_DrawString_EN(200, 180, macBuff, &Font24, WHITE, BLACK);
+  Paint_DrawString_EN(200, 130, ssid, &Font24, WHITE, BLACK);
+  Paint_DrawString_EN(200, 160, ipBuff, &Font24, WHITE, BLACK);
+  Paint_DrawString_EN(200, 190, macBuff, &Font24, WHITE, BLACK);
 
   EPD_7IN5_Display();
 
