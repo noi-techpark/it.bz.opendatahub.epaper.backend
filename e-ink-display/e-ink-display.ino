@@ -4,10 +4,9 @@
   A simple web server that can show an image to the E-Ink Display or clear the screen.
 
 
-  created 18 Jnauray 2020
+  created 18 Januray 2020
   by Simon Dalvai
 */
-
 #include <SPI.h>
 #include <WiFiNINA.h>
 #include "EPD_7in5.h"
@@ -126,7 +125,8 @@ void loop() {
             sleep();
             client.println("HTTP/1.1 200 OK");
             client.println("Content-Type: text/html");
-            client.println("Connection: close");  // the connection will be closed after completion of the response
+            client.println();
+            client.println(getCurrentState());
             break;
           }
           else if (c == '3') { //3 means API is asking for current state
@@ -139,7 +139,7 @@ void loop() {
 
           //incrementing coordinates
           x++;
-          if (x == 640) {
+          if (x == EPD_7IN5_WIDTH) {
             x = 0;
             y++;
           }
@@ -162,13 +162,14 @@ void loop() {
       } else {
         //gets only triggered when writing new image
 
+        hasImage = true;
+
+
         //Closing conncetion with client
         client.println("HTTP/1.1 200 OK");
         client.println("Content-Type: text/html");
-        client.println("Connection: close");  // the connection will be closed after completion of the response
-
-        hasImage = true;
-
+        client.println();
+        client.println(getCurrentState());
 
         //All bits recieved, so writing image to display and
         writeImageToDisplay();
