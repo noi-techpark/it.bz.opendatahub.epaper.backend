@@ -21,22 +21,13 @@ int keyIndex = 0;                 // your network key Index number (needed only 
 int status = WL_IDLE_STATUS;
 
 
-//states of display
-boolean isSleeping = false;
-boolean hasImage = false;
-int batteryState = 100;
-
-
 WiFiServer server(80);
 
-void setup() {
-  //Initialize serial and wait for port to open:
-  Serial.begin(115200);
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
+char state[] = "0;0;100"; //0 sleeping, 1 has image, 2 battery state
 
-  Serial.println("Initialize Display");
+
+void setup() {
+
   DEV_Module_Init();
   EPD_7IN5_Init();
   EPD_7IN5_Clear();
@@ -72,18 +63,14 @@ void setup() {
   server.begin();
   // you're connected now, so print out the status:
   printWifiStatus();
-
-
   sleep();
-
-
-
 }
 
 
 void loop() {
   // listen for incoming clients
   WiFiClient client = server.available();
+
   if (client) {
     Serial.println("new client");
     // an http request ends with a blank line
@@ -97,43 +84,50 @@ void loop() {
 
 
     //coordinates to write every single pixel to screen
-    int  x = 0;
-    int  y = 0;
+    int x = 0;
+    int y = 0;
 
     while (client.connected()) {
       if (client.available()) {
         char c = client.read();
 
-        if (!content)
+        if (!content) {
           Serial.write(c);
-
-
-        // read content
-        if (content) {
+          if (c == '\n' && currentLineIsBlank) {
+            content = true;
+          }
+          if (c == '\n') {
+            // you're starting a new line
+            currentLineIsBlank = true;
+          } else if (c != '\r') {
+            // you've gotten a character on the current line
+            currentLineIsBlank = false;
+          }
+        }
+        else {
           if (c == '1') {
             if (!isDisplayClearedAndWakedUp) {
               wakeUp();
               clearDisplay();
               isDisplayClearedAndWakedUp = true;
             }
-            printPixelToScreen(x, y);
+            Paint_DrawPoint(x, y, BLACK, DOT_PIXEL_DFT, DOT_STYLE_DFT);
           }
           else if (c == '2') { // 2 means clear display
             wakeUp();
             clearDisplay();
-            hasImage = false;
             sleep();
             client.println("HTTP/1.1 200 OK");
             client.println("Content-Type: text/html");
             client.println();
-            client.println(getCurrentState());
+            client.println(state);
             break;
           }
           else if (c == '3') { //3 means API is asking for current state
             client.println("HTTP/1.1 200 OK");
             client.println("Content-Type: text/html");
             client.println();
-            client.println(getCurrentState());
+            client.println(state);
             break;
           }
 
@@ -144,32 +138,22 @@ void loop() {
             y++;
           }
 
-          //delay to kepp sure that image is displayed correctly
-          if (x % 2 == 0)
+          //          delay to kepp sure that image is displayed correctly
+          if (x % 10 == 0)
             DEV_Delay_ms(1);
         }
 
-        if (c == '\n' && currentLineIsBlank) {
-          content = true;
-        }
-        if (c == '\n') {
-          // you're starting a new line
-          currentLineIsBlank = true;
-        } else if (c != '\r') {
-          // you've gotten a character on the current line
-          currentLineIsBlank = false;
-        }
       } else {
         //gets only triggered when writing new image
 
-        hasImage = true;
+        state[2] = '1';
 
 
         //Closing conncetion with client
         client.println("HTTP/1.1 200 OK");
         client.println("Content-Type: text/html");
         client.println();
-        client.println(getCurrentState());
+        client.println(state);
 
         //All bits recieved, so writing image to display and
         writeImageToDisplay();
@@ -185,12 +169,7 @@ void loop() {
     client.stop();
     Serial.println("client disconnected");
   }
-
-
-}
-
-void printPixelToScreen(int x, int y) {
-  Paint_DrawPoint(x, y, BLACK, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+  delay(1000);
 }
 
 
@@ -206,14 +185,15 @@ void clearDisplay() {
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
   Paint_Clear(WHITE);
   EPD_7IN5_Display();
+  state[2] = '0';
   Serial.println("Clear display done");
 }
 
 void sleep() {
-  if (!isSleeping) {
+  if (state[0] == '0') {
     EPD_7IN5_Sleep();
     DEV_Delay_ms(2000);
-    isSleeping = true;
+    state[0] = '1';
     Serial.println("Display sleeping");
   }
 }
@@ -221,57 +201,14 @@ void sleep() {
 
 
 void wakeUp() {
-  if (isSleeping) {
+  if ( state[0] == '1') {
     DEV_Module_Init();
     EPD_7IN5_Init();
     DEV_Delay_ms(500);
-    isSleeping = false;
-    Serial.println("Display waked up");
+    state[0] = '0';
+    Serial.println("Display woke up");
   }
 }
-
-String getCurrentState() {
-  String ret = String(isSleeping);
-  String separator = ";"; //seaparator to be able to splut the string in API example: isSleeping;hasImage;batteryState;IP;MAC => 0;1;92;192.168.1.10
-  ret += separator;
-
-  ret += String(hasImage);
-  ret += separator;
-
-  ret += batteryState;
-  ret += separator;
-
-
-  ret += ipToString(WiFi.localIP());
-  ret += separator;
-
-  byte mac[6];
-  WiFi.macAddress(mac);
-  ret += macToString(mac);
-
-  return ret;
-}
-
-String ipToString(IPAddress ip) {
-  String s = "";
-  for (int i = 0; i < 4; i++) {
-    s += i  ? "." + String(ip[i]) : String(ip[i]);
-  }
-  return s;
-}
-
-String macToString(byte mac[]) {
-  String s;
-  for (byte i = 0; i < 6; ++i)
-  {
-    char buf[3];
-    sprintf(buf, "%2X", mac[i]);
-    s += buf;
-    if (i < 5) s += ':';
-  }
-  return s;
-}
-
 
 
 void printWifiStatus() {
@@ -284,30 +221,14 @@ void printWifiStatus() {
   Serial.print("IP Address: ");
   Serial.println(ip);
 
-  String ipString = ipToString(ip);
-  char ipBuff[ipString.length() + 2];
-  ipString.toCharArray(ipBuff, ipString.length() + 1);
-
-  byte mac[6];
-  WiFi.macAddress(mac);
-  String macString = macToString(mac);
-  char macBuff[macString.length() + 2];
-  macString.toCharArray(macBuff, macString.length() + 1);
+  char ipBuff[18];
+  sprintf(ipBuff, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
 
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
   Paint_Clear(WHITE);
 
   Paint_DrawString_EN(200, 130, ssid, &Font24, WHITE, BLACK);
   Paint_DrawString_EN(200, 160, ipBuff, &Font24, WHITE, BLACK);
-  Paint_DrawString_EN(200, 190, macBuff, &Font24, WHITE, BLACK);
 
   EPD_7IN5_Display();
-
-
-
-  // print the received signal strength:
-  long rssi = WiFi.RSSI();
-  Serial.print("signal strength (RSSI):");
-  Serial.print(rssi);
-  Serial.println(" dBm");
 }
