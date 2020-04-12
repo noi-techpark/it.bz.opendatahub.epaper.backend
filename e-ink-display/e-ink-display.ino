@@ -135,8 +135,10 @@ void loop() {
             wakeUp();
             clearDisplay();
             sleep();
+
+
             char state[80];
-            sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery);
+            sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT);
 
             client.println("HTTP/1.1 200 OK");
             client.println("Content-Type: application/json");
@@ -146,8 +148,8 @@ void loop() {
           }
           else if (c == '3') { //3 means API is asking for current state
             char state[80];
-            sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery);
-            Serial.println(state);
+            sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT);
+
             client.println("HTTP/1.1 200 OK");
             client.println("Content-Type: application/json");
             client.println();
@@ -171,31 +173,16 @@ void loop() {
         //gets only triggered when writing new image
 
         hasImage = true;
-        char widthBuff [4];
-        sprintf (widthBuff, "%03i", EPD_7IN5_WIDTH);
-        char heightBuff [4];
-        sprintf (heightBuff, "%03i", EPD_7IN5_HEIGHT);
+        writeImageToDisplay();
+        sleep();
 
-
-        //Closing conncetion with client
-        client.println("HTTP/1.1 200 OK");
-        client.println("Content-Type: text/html");
-        client.println();
         char state[80];
-        sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery);
+        sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT);
 
         client.println("HTTP/1.1 200 OK");
         client.println("Content-Type: application/json");
         client.println();
         client.println(state);
-        //        client.println(widthBuff);
-        //        client.println(heightBuff);
-        //        client.println(macBuff);
-
-        //All bits recieved, so writing image to display and
-        writeImageToDisplay();
-
-        sleep();
         break;
       }
     }
