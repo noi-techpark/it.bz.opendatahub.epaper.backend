@@ -9,6 +9,7 @@
 */
 #include <SPI.h>
 #include <WiFiNINA.h>
+#include <WiFiUdp.h>
 #include "EPD_7in5.h"
 #include "GUI_Paint.h"
 #include "config.h"
@@ -18,15 +19,26 @@ char ssid[] = SECRET_SSID;        // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;                 // your network key Index number (needed only for WEP)
 
+
 int status = WL_IDLE_STATUS;
 
+IPAddress broadCast;
+IPAddress ip;
+char macBuff[18];
 
+boolean connectedToProxy = false;
+
+WiFiUDP udp;
 WiFiServer server(80);
 
-char state[] = "0;0;100"; //0 sleeping, 1 has image, 2 battery state
+boolean sleeping;
+boolean hasImage;
+int battery;
 
 
 void setup() {
+
+
 
   DEV_Module_Init();
   EPD_7IN5_Init();
@@ -64,6 +76,11 @@ void setup() {
   // you're connected now, so print out the status:
   printWifiStatus();
   sleep();
+
+  udp.begin(5005);
+
+
+
 }
 
 
@@ -89,6 +106,7 @@ void loop() {
 
     while (client.connected()) {
       if (client.available()) {
+        connectedToProxy = true;
         char c = client.read();
 
         if (!content) {
@@ -117,15 +135,21 @@ void loop() {
             wakeUp();
             clearDisplay();
             sleep();
+            char state[80];
+            sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery);
+
             client.println("HTTP/1.1 200 OK");
-            client.println("Content-Type: text/html");
+            client.println("Content-Type: application/json");
             client.println();
             client.println(state);
             break;
           }
           else if (c == '3') { //3 means API is asking for current state
+            char state[80];
+            sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery);
+            Serial.println(state);
             client.println("HTTP/1.1 200 OK");
-            client.println("Content-Type: text/html");
+            client.println("Content-Type: application/json");
             client.println();
             client.println(state);
             break;
@@ -146,14 +170,27 @@ void loop() {
       } else {
         //gets only triggered when writing new image
 
-        state[2] = '1';
+        hasImage = true;
+        char widthBuff [4];
+        sprintf (widthBuff, "%03i", EPD_7IN5_WIDTH);
+        char heightBuff [4];
+        sprintf (heightBuff, "%03i", EPD_7IN5_HEIGHT);
 
 
         //Closing conncetion with client
         client.println("HTTP/1.1 200 OK");
         client.println("Content-Type: text/html");
         client.println();
+        char state[80];
+        sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery);
+
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: application/json");
+        client.println();
         client.println(state);
+        //        client.println(widthBuff);
+        //        client.println(heightBuff);
+        //        client.println(macBuff);
 
         //All bits recieved, so writing image to display and
         writeImageToDisplay();
@@ -169,7 +206,20 @@ void loop() {
     client.stop();
     Serial.println("client disconnected");
   }
-  delay(1000);
+
+  if (!connectedToProxy) {
+    // send a reply, to the IP address and port that sent us the packet we received
+    if (udp.beginPacket(broadCast, 5006) == 0)
+    {
+      Serial.println(F("BeginPacket fail"));
+    }
+    udp.write(macBuff);
+    if (udp.endPacket() == 0)
+    {
+      Serial.println(F("endPacket fail"));
+    }
+  }
+  delay(1);
 }
 
 
@@ -185,15 +235,15 @@ void clearDisplay() {
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
   Paint_Clear(WHITE);
   EPD_7IN5_Display();
-  state[2] = '0';
+  hasImage = false;
   Serial.println("Clear display done");
 }
 
 void sleep() {
-  if (state[0] == '0') {
+  if (!sleeping) {
     EPD_7IN5_Sleep();
     DEV_Delay_ms(2000);
-    state[0] = '1';
+    sleeping = true;
     Serial.println("Display sleeping");
   }
 }
@@ -201,11 +251,11 @@ void sleep() {
 
 
 void wakeUp() {
-  if ( state[0] == '1') {
+  if (sleeping) {
     DEV_Module_Init();
     EPD_7IN5_Init();
     DEV_Delay_ms(500);
-    state[0] = '0';
+    sleeping = false;;
     Serial.println("Display woke up");
   }
 }
@@ -218,17 +268,20 @@ void printWifiStatus() {
 
   // print your board's IP address:
   IPAddress ip = WiFi.localIP();
+  IPAddress subnet = WiFi.subnetMask();
+  broadCast = ip | ~subnet;
   Serial.print("IP Address: ");
   Serial.println(ip);
 
-  char ipBuff[18];
-  sprintf(ipBuff, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+  byte mac[6];
+  WiFi.macAddress(mac);
+  sprintf (macBuff, "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
 
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
   Paint_Clear(WHITE);
 
-  Paint_DrawString_EN(200, 130, ssid, &Font24, WHITE, BLACK);
-  Paint_DrawString_EN(200, 160, ipBuff, &Font24, WHITE, BLACK);
+  Paint_DrawString_EN(200, 160, "Connecting...", &Font24, WHITE, BLACK);
 
   EPD_7IN5_Display();
 }
