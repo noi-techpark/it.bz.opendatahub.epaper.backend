@@ -17,7 +17,6 @@
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = SECRET_SSID;        // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
-int keyIndex = 0;                 // your network key Index number (needed only for WEP)
 
 
 int status = WL_IDLE_STATUS;
@@ -37,9 +36,6 @@ int battery;
 
 
 void setup() {
-
-
-
   DEV_Module_Init();
   EPD_7IN5_Init();
   EPD_7IN5_Clear();
@@ -72,141 +68,161 @@ void setup() {
     // wait 10 seconds for connection:
     delay(10000);
   }
-  server.begin();
   // you're connected now, so print out the status:
   printWifiStatus();
+
+  
+  byte mac[6];
+  WiFi.macAddress(mac);
+  sprintf (macBuff, "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  
   sleep();
 
+  server.begin();
   udp.begin(5005);
-
-
-
 }
 
 
 void loop() {
-  // listen for incoming clients
-  WiFiClient client = server.available();
+  if (WiFi.status() != WL_CONNECTED) {
+    while (WiFi.status() != WL_CONNECTED) {
+      Serial.println(WiFi.status());
+      Serial.println("Wifi connection lost");
+      if (sizeof(pass) > 0)
+        status = WiFi.begin(ssid, pass);
+      else
+        status = WiFi.begin(ssid);
+      Serial.println("Tried restart");
+      delay(10000);
+    }
+    server.begin();
+    udp.begin(5005);
+  } else {
+    // listen for incoming clients
+    WiFiClient client = server.available();
 
-  if (client) {
-    Serial.println("new client");
-    // an http request ends with a blank line
-    boolean currentLineIsBlank = true;
+    if (client) {
+      Serial.println("new client");
+      // an http request ends with a blank line
+      boolean currentLineIsBlank = true;
 
-    //to read content
-    boolean content = false;
+      //to read content
+      boolean content = false;
 
-    //to save if display has been cleared before new image gets written
-    boolean isDisplayClearedAndWakedUp = false;
+      //to save if display has been cleared before new image gets written
+      boolean isDisplayClearedAndWakedUp = false;
 
 
-    //coordinates to write every single pixel to screen
-    int x = 0;
-    int y = 0;
+      //coordinates to write every single pixel to screen
+      int x = 0;
+      int y = 0;
 
-    while (client.connected()) {
-      if (client.available()) {
-        connectedToProxy = true;
-        char c = client.read();
+      while (client.connected()) {
+        if (client.available()) {
+          connectedToProxy = true;
+          char c = client.read();
 
-        if (!content) {
-          Serial.write(c);
-          if (c == '\n' && currentLineIsBlank) {
-            content = true;
+          if (!content) {
+            Serial.write(c);
+            if (c == '\n' && currentLineIsBlank) {
+              content = true;
+            }
+            if (c == '\n') {
+              // you're starting a new line
+              currentLineIsBlank = true;
+            } else if (c != '\r') {
+              // you've gotten a character on the current line
+              currentLineIsBlank = false;
+            }
           }
-          if (c == '\n') {
-            // you're starting a new line
-            currentLineIsBlank = true;
-          } else if (c != '\r') {
-            // you've gotten a character on the current line
-            currentLineIsBlank = false;
-          }
-        }
-        else {
-          if (c == '1') {
-            if (!isDisplayClearedAndWakedUp) {
+          else {
+            if (c == '1') {
+              if (!isDisplayClearedAndWakedUp) {
+                wakeUp();
+                clearDisplay();
+                isDisplayClearedAndWakedUp = true;
+              }
+              Paint_DrawPoint(x, y, BLACK, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+            }
+            else if (c == '2') { // 2 means clear display
               wakeUp();
               clearDisplay();
-              isDisplayClearedAndWakedUp = true;
+              sleep();
+
+
+              char state[120];
+              sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT, macBuff);
+
+              client.println("HTTP/1.1 200 OK");
+              client.println("Content-Type: application/json");
+              client.println();
+              client.println(state);
+              break;
             }
-            Paint_DrawPoint(x, y, BLACK, DOT_PIXEL_DFT, DOT_STYLE_DFT);
-          }
-          else if (c == '2') { // 2 means clear display
-            wakeUp();
-            clearDisplay();
-            sleep();
+            else if (c == '3') { //3 means API is asking for current state
+              char state[120];
+              sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT, macBuff);
 
+              client.println("HTTP/1.1 200 OK");
+              client.println("Content-Type: application/json");
+              client.println();
+              client.println(state);
+              break;
+            }
 
-            char state[80];
-            sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT);
+            //incrementing coordinates
+            x++;
+            if (x == EPD_7IN5_WIDTH) {
+              x = 0;
+              y++;
+            }
 
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-Type: application/json");
-            client.println();
-            client.println(state);
-            break;
-          }
-          else if (c == '3') { //3 means API is asking for current state
-            char state[80];
-            sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT);
-
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-Type: application/json");
-            client.println();
-            client.println(state);
-            break;
+            //          delay to kepp sure that image is displayed correctly
+            if (x % 2 == 0)
+              DEV_Delay_ms(1);
           }
 
-          //incrementing coordinates
-          x++;
-          if (x == EPD_7IN5_WIDTH) {
-            x = 0;
-            y++;
-          }
+        } else {
+          //gets only triggered when writing new image
 
-          //          delay to kepp sure that image is displayed correctly
-          if (x % 10 == 0)
-            DEV_Delay_ms(1);
+          hasImage = true;
+          writeImageToDisplay();
+          sleep();
+
+          char state[120];
+          sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT, macBuff);
+          
+          client.println("HTTP/1.1 200 OK");
+          client.println("Content-Type: application/json");
+          client.println();
+          client.println(state);
+          break;
         }
-
-      } else {
-        //gets only triggered when writing new image
-
-        hasImage = true;
-        writeImageToDisplay();
-        sleep();
-
-        char state[80];
-        sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT);
-
-        client.println("HTTP/1.1 200 OK");
-        client.println("Content-Type: application/json");
-        client.println();
-        client.println(state);
-        break;
       }
-    }
-    // give the web browser time to receive the data
-    delay(100);
+      // give the web browser time to receive the data
+      delay(500);
 
-    // close the connection:
-    client.stop();
-    Serial.println("client disconnected");
-  }
+      // close the connection:
+      client.stop();
+      Serial.println("client disconnected");
+    }
 
-  if (!connectedToProxy) {
-    // send a reply, to the IP address and port that sent us the packet we received
-    if (udp.beginPacket(broadCast, 5006) == 0)
-    {
-      Serial.println(F("BeginPacket fail"));
+    if (!connectedToProxy) {
+      // send a reply, to the IP address and port that sent us the packet we received
+      if (udp.beginPacket(broadCast, 5006) == 0)
+      {
+        Serial.println(F("BeginPacket fail"));
+      }
+      udp.write(macBuff);
+      if (udp.endPacket() == 0)
+      {
+        Serial.println(F("endPacket fail"));
+      }
+      delay(10000);
     }
-    udp.write(macBuff);
-    if (udp.endPacket() == 0)
-    {
-      Serial.println(F("endPacket fail"));
-    }
+
   }
-  delay(1);
+  delay(100);
 }
 
 
@@ -259,10 +275,6 @@ void printWifiStatus() {
   broadCast = ip | ~subnet;
   Serial.print("IP Address: ");
   Serial.println(ip);
-
-  byte mac[6];
-  WiFi.macAddress(mac);
-  sprintf (macBuff, "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
 
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
