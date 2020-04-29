@@ -10,7 +10,7 @@
 #include <SPI.h>
 #include <WiFiNINA.h>
 #include <WiFiUdp.h>
-#include "EPD_7in5.h"
+#include "EPD.h"
 #include "GUI_Paint.h"
 #include "config.h"
 
@@ -37,8 +37,8 @@ int battery;
 
 void setup() {
   DEV_Module_Init();
-  EPD_7IN5_Init();
-  EPD_7IN5_Clear();
+  EPD_7IN5BC_Init();
+  EPD_7IN5BC_Clear();
   DEV_Delay_ms(500);
   Serial.println("Display Init done");
 
@@ -151,7 +151,7 @@ void loop() {
 
 
               char state[120];
-              sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT, macBuff);
+              sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
 
               client.println("HTTP/1.1 200 OK");
               client.println("Content-Type: application/json");
@@ -161,7 +161,7 @@ void loop() {
             }
             else if (c == '3') { //3 means API is asking for current state
               char state[120];
-              sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT, macBuff);
+              sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
 
               client.println("HTTP/1.1 200 OK");
               client.println("Content-Type: application/json");
@@ -172,7 +172,7 @@ void loop() {
 
             //incrementing coordinates
             x++;
-            if (x == EPD_7IN5_WIDTH) {
+            if (x == EPD_7IN5BC_WIDTH) {
               x = 0;
               y++;
             }
@@ -190,7 +190,7 @@ void loop() {
           sleep();
 
           char state[120];
-          sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5_WIDTH, (int)EPD_7IN5_HEIGHT, macBuff);
+          sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
           
           client.println("HTTP/1.1 200 OK");
           client.println("Content-Type: application/json");
@@ -228,23 +228,23 @@ void loop() {
 
 void writeImageToDisplay() {
   Serial.println("Write image to screen");
-  EPD_7IN5_Display();
+  EPD_7IN5BC_Display();
   DEV_Delay_ms(2000);
   Serial.println("Write image to screen done");
 }
 
 void clearDisplay() {
   Serial.println("Clear display");
-  Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
+  Paint_NewImage(IMAGE_BW, EPD_7IN5BC_WIDTH, EPD_7IN5BC_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
   Paint_Clear(WHITE);
-  EPD_7IN5_Display();
+  EPD_7IN5BC_Display();
   hasImage = false;
   Serial.println("Clear display done");
 }
 
 void sleep() {
   if (!sleeping) {
-    EPD_7IN5_Sleep();
+    EPD_7IN5BC_Sleep();
     DEV_Delay_ms(2000);
     sleeping = true;
     Serial.println("Display sleeping");
@@ -256,7 +256,7 @@ void sleep() {
 void wakeUp() {
   if (sleeping) {
     DEV_Module_Init();
-    EPD_7IN5_Init();
+    EPD_7IN5BC_Init();
     DEV_Delay_ms(500);
     sleeping = false;;
     Serial.println("Display woke up");
@@ -277,10 +277,10 @@ void printWifiStatus() {
   Serial.println(ip);
 
 
-  Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
+  Paint_NewImage(IMAGE_BW, EPD_7IN5BC_WIDTH, EPD_7IN5BC_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
   Paint_Clear(WHITE);
 
   Paint_DrawString_EN(200, 160, "Connecting...", &Font24, WHITE, BLACK);
 
-  EPD_7IN5_Display();
+  EPD_7IN5BC_Display();
 }
