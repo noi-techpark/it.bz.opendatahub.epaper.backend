@@ -142,7 +142,7 @@ void loop() {
                 clearDisplay();
                 isDisplayClearedAndWakedUp = true;
               }
-              Paint_DrawPoint(x, y, BLACK, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+              Paint_DrawPoint(x, y, WHITE, DOT_PIXEL_DFT, DOT_STYLE_DFT);
             }
             else if (c == '2') { // 2 means clear display
               wakeUp();
@@ -178,7 +178,7 @@ void loop() {
             }
 
             //          delay to kepp sure that image is displayed correctly
-            if (x % 2 == 0)
+            if (x % 10 == 0)
               DEV_Delay_ms(1);
           }
 
@@ -236,7 +236,7 @@ void writeImageToDisplay() {
 void clearDisplay() {
   Serial.println("Clear display");
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
-  Paint_Clear(WHITE);
+  Paint_Clear(BLACK);
   EPD_7IN5_Display();
   hasImage = false;
   Serial.println("Clear display done");
@@ -278,9 +278,9 @@ void printWifiStatus() {
 
 
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
-  Paint_Clear(WHITE);
+  Paint_Clear(BLACK);
 
-  Paint_DrawString_EN(200, 160, "Connecting...", &Font24, WHITE, BLACK);
+  Paint_DrawString_EN(200, 160, "Connecting...", &Font24, BLACK, WHITE);
 
   EPD_7IN5_Display();
 }
