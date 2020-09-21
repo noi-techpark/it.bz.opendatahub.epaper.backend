@@ -179,7 +179,7 @@ void loop() {
             }
 
             //          delay to kepp sure that image is displayed correctly
-            if (x % 10 == 0)
+            if (x % 4 == 0)
               DEV_Delay_ms(1);
           }
 
