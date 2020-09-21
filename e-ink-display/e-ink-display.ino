@@ -17,6 +17,7 @@
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = SECRET_SSID;        // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
+char display_name[] = DISPLAY_NAME;
 
 
 int status = WL_IDLE_STATUS;
@@ -150,8 +151,8 @@ void loop() {
               sleep();
 
 
-              char state[120];
-              sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
+              char state[200];
+              sprintf(state, "{\"display_name\": \"%s\" ,\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}",display_name ,sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
 
               client.println("HTTP/1.1 200 OK");
               client.println("Content-Type: application/json");
@@ -160,8 +161,8 @@ void loop() {
               break;
             }
             else if (c == '3') { //3 means API is asking for current state
-              char state[120];
-              sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
+              char state[200];
+              sprintf(state, "{\"display_name\": \"%s\" ,\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}",display_name, sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
 
               client.println("HTTP/1.1 200 OK");
               client.println("Content-Type: application/json");
@@ -189,8 +190,8 @@ void loop() {
           writeImageToDisplay();
           sleep();
 
-          char state[120];
-          sprintf(state, "{\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
+          char state[200];
+          sprintf(state, "{\"display_name\": \"%s\" ,\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", display_name, sleeping ? "true" : "false", hasImage ? "true" : "false", battery, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
           
           client.println("HTTP/1.1 200 OK");
           client.println("Content-Type: application/json");
