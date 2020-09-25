@@ -10,7 +10,9 @@ Code for Arduino UNO WIFI rev.2 Board to show images from the [e-ink-displays-ap
 - [Setup](#setup)
     - [WPA](#wpa)
     - [OPEN WIFI - NO PASSWORD](#open-wifi---no-password)
-    - [UPLOAD](#upload)
+    - [Predefined display name](#predefined-display-name)
+    - [Upload](#upload)
+    - [Troubleshoot](#troubleshoot)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -33,5 +35,14 @@ Leave SECRET_PASS empty in config.h
 #define SECRET_PASS ""
 ```
 
-### UPLOAD
+### Predefined display name
+If you want to connect automatically to an existing display, put the exact display Name you can see in the Webapp to config.h file. example:
+```
+#define DISPLAY_NAME "Seminar 2 Display"
+```
+
+### Upload
 Now you can upload the code to your Arduino Board. Set Serial Monitor BAUD Rate to 115200 and take note of IP-Address the board got. So you can create a connection for the Board with the Spring-Backend in the Webapp by putting the IP-Address in the Network Address field when you create the connection.
+
+### Troubleshoot
+If the proxy doesn't show any connection after some minutes, check if firewall of machine where proxy is running has ingoing traffic allowed and that proxy and the displays are in the same WIFI network. The incoming traffic needs to be allowed because of UDP broadcasting.
