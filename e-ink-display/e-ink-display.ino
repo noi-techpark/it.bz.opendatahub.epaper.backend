@@ -137,6 +137,8 @@ void loop() {
             }
           }
           else {
+
+            
             if (c == '1') {
               if (!isDisplayClearedAndWakedUp) {
                 wakeUp();
@@ -179,15 +181,19 @@ void loop() {
             }
 
             //          delay to kepp sure that image is displayed correctly
-            if (x % 4 == 0)
-              DEV_Delay_ms(1);
+            if (x % 12 == 0)
+              DEV_Delay_ms(2);
+
+            // when third image is written, write buffer to display
+            if (y > 0 && y % (EPD_7IN5BC_HEIGHT/3) == 0 && x == 0)
+              writeImageToDisplay();
           }
 
         } else {
           //gets only triggered when writing new image
 
           hasImage = true;
-          writeImageToDisplay();
+//          writeImageToDisplay();
           sleep();
 
           char state[200];
