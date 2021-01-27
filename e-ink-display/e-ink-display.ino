@@ -19,7 +19,7 @@
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = SECRET_SSID;       // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
-char display_name[] = DISPLAY_NAME;
+char displayName[] = DISPLAY_NAME;
 
 IPAddress broadCast;
 IPAddress ip;
@@ -65,13 +65,6 @@ void setup() {
     while (true);
   }
 
-  // check firmware, not needed in production
-
-  //  String fv = WiFi.firmwareVersion();
-  //  if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
-  //     Serial.println("Please upgrade the firmware");
-  //  }
-
   connectToWifi();
 
   // you're connected now, so print out the status:
@@ -81,20 +74,34 @@ void setup() {
 
   // close serial connection to have more ressources for WIFI connection
   // TODO add debug flag to be bale to use serial for debug reasons
-  //  Serial.end();
+  Serial.end();
 }
 
 
 void loop() {
+
   // check wifi connection and try to reconnect if lost
   // reset proxy connection flag, to be able to redo the udp broadcast
   if (WiFi.status() != WL_CONNECTED) {
+
     connectToWifi();
     connectedToProxy = false;
+
   } else {
 
-    // check if client exits from last loop iteration
+    if (!connectedToProxy && !wifiClient) {
+      // send a reply, to the IP address and port that sent us the packet we received
+
+      udpBroadcast();
+
+      //      delay(5000);
+      myDelay(5000);
+    } 
+    
+    
     if (wifiClient) {
+      // check if client exits from last loop iteration
+
       // an http request ends with a blank line
       boolean currentLineIsBlank = true;
 
@@ -154,7 +161,7 @@ void loop() {
 
 
             chunkCounter++;
-            if (chunkCounter == 32)
+            if (chunkCounter == 128)
               break;
           }
         }
@@ -162,87 +169,103 @@ void loop() {
 
       if (!wifiClient.available()) { // check if client has still bytes to send
 
-
-        // read MAC address
-        char macBuff[18];
-        byte mac[6];
-        WiFi.macAddress(mac);
-        sprintf (macBuff, "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
-        char state[200];
-
-        sprintf(state, "{\"displayName\": \"%s\" ,\"sleeping\": %s ,\"hasImage\": %s ,\"battery\": %i, \"width\": %i,\"height\": %i,\"mac\": \"%s\"}", display_name, sleeping ? "true" : "false", hasImage ? "true" : "false", 0, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
-
-        // // Serial.println(state);
-        // // Serial.println(strlen(state));
-
-        wifiClient.println("HTTP/1.1 200 OK");
-        wifiClient.println("Content-Type: application/json");
-        wifiClient.println("Connection: close");
-        wifiClient.print("Content-Length: ");
-        wifiClient.println(strlen(state));
-        wifiClient.println();
-        wifiClient.println(state);
-        wifiClient.println();
-        // give the web browser time to receive the data
-        delay(2000);
-
-        // close the connection:
-        wifiClient.stop();
-
-
+        // draw image to screen
         if (imageRequest) {
-          MySDCard_CloseImage();
-          wakeUpDisplay();
-          clearDisplay();
-          MySDCard_OpenImage();
-
-          for (int y = 0; y < EPD_7IN5BC_HEIGHT; y++) {
-            for (int x = 0; x < EPD_7IN5BC_WIDTH; x++) {
-              if (MySDCard_ReadPixel() == '1') {
-                Paint_DrawPoint(x, y, WHITE, DOT_PIXEL_DFT, DOT_STYLE_DFT);
-              }
-            }
-          }
-
-          EPD_7IN5BC_Display();
-          DEV_Delay_ms(2000);
-          MySDCard_CloseImage();
-          // Serial.println("Writing image done");
+          drawImage();
         }
         hasImage = true;
         content = false;
         stateRequest = false;
         clearRequest = false;
         imageRequest = false;
-        wifiClient = server.available();
-        delay(2000);
+
+        sendState();
+      } else {
+        wifiClient = server.available(); // listen for clients
+        //      delay(2000);
+        myDelay(2000);
       }
+
+
     } else {
       wifiClient = server.available(); // listen for clients
-      delay(2000);
+      //      delay(2000);
+      myDelay(2000);
     }
 
-    if (!connectedToProxy && !wifiClient) {
-      // send a reply, to the IP address and port that sent us the packet we received
 
-      //      if (udp.beginPacket(broadCast, 5006) == 0)
-      //      {
-      //        // Serial.println(F("BeginPacket fail"));
-      //      }
-
-      udp.write(ipBuff);
-
-      //      if (udp.endPacket() == 0)
-      //      {
-      //        // Serial.println(F("endPacket fail"));
-      //      }
-
-      delay(5000);
-    }
 
   }
-  delay(100);
+
+
+  //    delay(100);
+//    myDelay(100);
+}
+
+void myDelay(long microSeconds)
+{
+  microSeconds *= 100; // transform to milliseconds
+  const unsigned long start = micros();
+  while (true)
+  {
+    unsigned long now = micros();
+    if (now - start >= microSeconds)
+    {
+      return;
+    }
+  }
+}
+
+void sendState() {
+  // read MAC address
+  char macBuff[18];
+  byte mac[6];
+  WiFi.macAddress(mac);
+  sprintf (macBuff, "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+  char state[200];
+
+  // use placeholders d = displayName, s = sleeping, i = hasImage, b = battery, w = width, h = height, m = mac
+  sprintf(state, "{\"d\": \"%s\" ,\"s\": %s ,\"i\": %s ,\"b\": %i, \"w\": %i,\"h\": %i,\"m\": \"%s\"}", displayName, sleeping ? "true" : "false", hasImage ? "true" : "false", 0, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
+
+  wifiClient.println("HTTP/1.1 200 OK");
+  wifiClient.println("Content-Type: application/json");
+  wifiClient.println("Connection: close");
+  wifiClient.print("Content-Length: ");
+  wifiClient.println(strlen(state));
+  wifiClient.println();
+  wifiClient.println(state);
+  wifiClient.println();
+  // give the proxy time to receive the data
+  delay(2000);
+
+  wifiClient.stop();
+
+}
+
+void udpBroadcast() {
+  udp.beginPacket(broadCast, 5006);
+  udp.write(ipBuff);
+  udp.endPacket();
+}
+
+void drawImage() {
+  MySDCard_CloseImage();
+  wakeUpDisplay();
+  clearDisplay();
+  MySDCard_OpenImage();
+
+  for (int y = 0; y < EPD_7IN5BC_HEIGHT; y++) {
+    for (int x = 0; x < EPD_7IN5BC_WIDTH; x++) {
+      if (MySDCard_ReadPixel() == '1') {
+        Paint_DrawPoint(x, y, WHITE, DOT_PIXEL_DFT, DOT_STYLE_DFT);
+      }
+    }
+  }
+
+  EPD_7IN5BC_Display();
+  DEV_Delay_ms(2000);
+  MySDCard_CloseImage();
 }
 
 void connectToWifi() {
@@ -257,8 +280,8 @@ void connectToWifi() {
     delay(10000);
   }
   //start udp and wifi server
-  udp.begin(5005);
   server.begin();
+  udp.begin(5005);
 }
 
 
@@ -340,14 +363,14 @@ void MySDCard_CreateImage(void) {
   // so you have to close this one before opening another.
   if (SD.exists("IMAGE.TXT"))
   {
-//    DEBUG("DELETE FILE!\n");
+    //    DEBUG("DELETE FILE!\n");
     SD.remove("IMAGE.TXT");
   }
   while (SD.exists("IMAGE.TXT"))
     ;
   imageFile = SD.open("IMAGE.TXT", FILE_WRITE);
 
-//  DEBUG("FILE OPEN!\n");
+  //  DEBUG("FILE OPEN!\n");
 }
 
 void MySDCard_OpenImage(void)
@@ -356,7 +379,7 @@ void MySDCard_OpenImage(void)
   // so you have to close this one before opening another.
   imageFile = SD.open("IMAGE.TXT");
 
-//  DEBUG("FILE OPEN!\n");
+  //  DEBUG("FILE OPEN!\n");
 }
 
 void MySDCard_WriteImagePart(const char part)
