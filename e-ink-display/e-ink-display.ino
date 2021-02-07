@@ -32,7 +32,7 @@ boolean connectedToProxy = false;
 
 WiFiUDP udp;
 WiFiServer server(80);
-WiFiClient wifiClient;
+WiFiClient client;
 
 File imageFile;
 
@@ -42,10 +42,9 @@ boolean sleeping = false;
 boolean hasImage = false;
 
 // current action flags
-boolean content = false;
-boolean stateRequest = false;
-boolean clearRequest = false;
-boolean imageRequest = false;
+boolean receivingImage = false;
+
+int partCounter = 0; // to send image in multiple parts, and counts the revicved parts
 
 
 void setup() {
@@ -89,18 +88,15 @@ void loop() {
 
   } else {
 
-    if (!connectedToProxy && !wifiClient) {
-      // send a reply, to the IP address and port that sent us the packet we received
-
+    if (!connectedToProxy) {
       udpBroadcast();
-
       //      delay(5000);
       myDelay(5000);
-    } 
-    
-    
-    if (wifiClient) {
-      // check if client exits from last loop iteration
+    }
+
+    client = server.available();
+
+    if (client) {
 
       // an http request ends with a blank line
       boolean currentLineIsBlank = true;
@@ -114,17 +110,18 @@ void loop() {
         udp.stop();
       }
 
+      boolean content = false;
 
-      // to read content (every single bit)
-      char c;
+      if (!receivingImage){
+        MySDCard_CreateImage();
+        receivingImage = true;
+      }
 
-      int chunkCounter = 0;
+      while (client.available()) {
+        char   c = client.read();
 
-      // TODO when using chungs, try read String until 32 (size of chunk)
 
-      while (wifiClient.available()) {
-        c = wifiClient.read();
-
+        // skip headers and read until content reached
         if (!content) {
           if (c == '\n' && currentLineIsBlank) {
             content = true;
@@ -137,69 +134,32 @@ void loop() {
             currentLineIsBlank = false;
           }
         }
+        // content reached
         else {
-          if (c == '2') // clear screen
-          {
-            clearRequest = true;
-            clearDisplay();
-          }
-          else if (c == '3') // state
-          {
-            stateRequest = true;
-          }
-          else // image data
-          {
-            // first create image file
-            if (!imageRequest)
-            {
-              imageRequest = true;
-              MySDCard_CreateImage();
-            }
-
-            // write to image file
-            MySDCard_WriteImagePart(c);
-
-
-            chunkCounter++;
-            if (chunkCounter == 128)
-              break;
-          }
+          MySDCard_WriteImagePart(c);
+            myDelay(1);
         }
+
+
       }
 
-      if (!wifiClient.available()) { // check if client has still bytes to send
+      partCounter++;
 
-        // draw image to screen
-        if (imageRequest) {
-          drawImage();
-        }
+      sendState();
+      if (partCounter == 5) { // check if full image arrived
+
+        MySDCard_CloseImage();
+
+        drawImage();
         hasImage = true;
-        content = false;
-        stateRequest = false;
-        clearRequest = false;
-        imageRequest = false;
-
-        sendState();
-      } else {
-        wifiClient = server.available(); // listen for clients
-        //      delay(2000);
-        myDelay(2000);
+        receivingImage = false;
+        partCounter = 0;
       }
-
-
-    } else {
-      wifiClient = server.available(); // listen for clients
-      //      delay(2000);
-      myDelay(2000);
     }
-
-
-
   }
 
-
   //    delay(100);
-//    myDelay(100);
+  myDelay(100);
 }
 
 void myDelay(long microSeconds)
@@ -228,18 +188,19 @@ void sendState() {
   // use placeholders d = displayName, s = sleeping, i = hasImage, b = battery, w = width, h = height, m = mac
   sprintf(state, "{\"d\": \"%s\" ,\"s\": %s ,\"i\": %s ,\"b\": %i, \"w\": %i,\"h\": %i,\"m\": \"%s\"}", displayName, sleeping ? "true" : "false", hasImage ? "true" : "false", 0, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
 
-  wifiClient.println("HTTP/1.1 200 OK");
-  wifiClient.println("Content-Type: application/json");
-  wifiClient.println("Connection: close");
-  wifiClient.print("Content-Length: ");
-  wifiClient.println(strlen(state));
-  wifiClient.println();
-  wifiClient.println(state);
-  wifiClient.println();
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: application/json");
+  client.println("Connection: close");
+  client.print("Content-Length: ");
+  client.println(strlen(state));
+  client.println();
+  client.println(state);
+  client.println();
   // give the proxy time to receive the data
-  delay(2000);
+//  delay(2000);
+  myDelay(200);
 
-  wifiClient.stop();
+  client.stop();
 
 }
 
@@ -250,7 +211,6 @@ void udpBroadcast() {
 }
 
 void drawImage() {
-  MySDCard_CloseImage();
   wakeUpDisplay();
   clearDisplay();
   MySDCard_OpenImage();
