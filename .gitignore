@@ -1,1 +1,3 @@
 e-ink-display/arduino_secrets.h
+*.hex
+.vscode
