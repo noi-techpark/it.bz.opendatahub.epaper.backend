@@ -7,7 +7,7 @@
   created 18 Januray 2020
   by Simon Dalvai
 */
-//#include <SPI.h>
+#include <SPI.h>
 #include <WiFiNINA.h>
 #include <WiFiUdp.h>
 #include "EPD.h"
@@ -32,7 +32,7 @@ boolean connectedToProxy = false;
 
 WiFiUDP udp;
 WiFiServer server(80);
-WiFiClient client;
+WiFiClient wifiClient;
 
 File imageFile;
 
@@ -42,9 +42,10 @@ boolean sleeping = false;
 boolean hasImage = false;
 
 // current action flags
-boolean receivingImage = false;
-
-int partCounter = 0; // to send image in multiple parts, and counts the revicved parts
+boolean content = false;
+boolean stateRequest = false;
+boolean clearRequest = false;
+boolean imageRequest = false;
 
 
 void setup() {
@@ -52,14 +53,14 @@ void setup() {
   EPD_7IN5BC_Init();
   EPD_7IN5BC_Clear();
   DEV_Delay_ms(500);
-  // Serial.println("Display Init done");
+  Serial.println("Display Init done");
 
   SDCard_Init();
 
 
   // check for the WiFi module:
   if (WiFi.status() == WL_NO_MODULE) {
-    // Serial.println("Communication with WiFi module failed!");
+    Serial.println("Communication with WiFi module failed!");
     // don't continue
     while (true);
   }
@@ -71,9 +72,6 @@ void setup() {
 
   sleepDisplay();
 
-  // close serial connection to have more ressources for WIFI connection
-  // TODO add debug flag to be bale to use serial for debug reasons
-  Serial.end();
 }
 
 
@@ -88,15 +86,18 @@ void loop() {
 
   } else {
 
-    if (!connectedToProxy) {
+    if (!connectedToProxy && !wifiClient) {
+      // send a reply, to the IP address and port that sent us the packet we received
+
       udpBroadcast();
-      //      delay(5000);
+
+      // delay(5000);
       myDelay(5000);
     }
 
-    client = server.available();
 
-    if (client) {
+    if (wifiClient) {
+      // check if client exits from last loop iteration
 
       // an http request ends with a blank line
       boolean currentLineIsBlank = true;
@@ -110,18 +111,17 @@ void loop() {
         udp.stop();
       }
 
-      boolean content = false;
 
-      if (!receivingImage){
-        MySDCard_CreateImage();
-        receivingImage = true;
-      }
+      // to read content (every single bit)
+      char c;
 
-      while (client.available()) {
-        char   c = client.read();
+      int chunkCounter = 0;
 
+      // TODO when using chungs, try read String until 32 (size of chunk)
 
-        // skip headers and read until content reached
+      while (wifiClient.available()) {
+        c = wifiClient.read();
+
         if (!content) {
           if (c == '\n' && currentLineIsBlank) {
             content = true;
@@ -134,31 +134,66 @@ void loop() {
             currentLineIsBlank = false;
           }
         }
-        // content reached
         else {
-          MySDCard_WriteImagePart(c);
-            myDelay(1);
+          // image data
+          if  (c == '0' || c == '1') {
+            // first create image file
+            if (!imageRequest)
+            {
+              imageRequest = true;
+              MySDCard_CreateImage();
+            }
+
+            // write to image file
+            MySDCard_WriteImagePart(c);
+            myDelay(5);
+
+            chunkCounter++;
+            if (chunkCounter == 4096)
+              break;
+          }
+          else if (c == '2') // clear screen
+          {
+            clearRequest = true;
+            clearDisplay();
+          }
+          else if (c == '3') // state
+          {
+            stateRequest = true;
+          }
+
         }
-
-
       }
 
-      partCounter++;
+      if (!wifiClient.available()) { // check if client has still bytes to send
 
-      sendState();
-      if (partCounter == 5) { // check if full image arrived
-
-        MySDCard_CloseImage();
-
-        drawImage();
+        // draw image to screen
+        if (imageRequest) {
+          drawImage();
+        }
         hasImage = true;
-        receivingImage = false;
-        partCounter = 0;
+        content = false;
+        stateRequest = false;
+        clearRequest = false;
+        imageRequest = false;
+
+        sendState();
+      } else {
+        wifiClient = server.available(); // listen for clients
+        // delay(2000);
+        myDelay(2000);
       }
+
+
+    } else {
+      wifiClient = server.available(); // listen for clients
+      // delay(2000);
+      myDelay(2000);
     }
   }
 
-  //    delay(100);
+
+  // delay(100);
   myDelay(100);
 }
 
@@ -188,19 +223,18 @@ void sendState() {
   // use placeholders d = displayName, s = sleeping, i = hasImage, b = battery, w = width, h = height, m = mac
   sprintf(state, "{\"d\": \"%s\" ,\"s\": %s ,\"i\": %s ,\"b\": %i, \"w\": %i,\"h\": %i,\"m\": \"%s\"}", displayName, sleeping ? "true" : "false", hasImage ? "true" : "false", 0, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
 
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: application/json");
-  client.println("Connection: close");
-  client.print("Content-Length: ");
-  client.println(strlen(state));
-  client.println();
-  client.println(state);
-  client.println();
+  wifiClient.println("HTTP/1.1 200 OK");
+  wifiClient.println("Content-Type: application/json");
+  wifiClient.println("Connection: close");
+  wifiClient.print("Content-Length: ");
+  wifiClient.println(strlen(state));
+  wifiClient.println();
+  wifiClient.println(state);
+  wifiClient.println();
   // give the proxy time to receive the data
-//  delay(2000);
-  myDelay(200);
+  delay(2000);
 
-  client.stop();
+  wifiClient.stop();
 
 }
 
@@ -211,10 +245,15 @@ void udpBroadcast() {
 }
 
 void drawImage() {
+  MySDCard_CloseImage();
   wakeUpDisplay();
-  clearDisplay();
+  //  clearDisplay();
   MySDCard_OpenImage();
 
+
+  Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
+  Paint_Clear(BLACK);
+ 
   for (int y = 0; y < EPD_7IN5BC_HEIGHT; y++) {
     for (int x = 0; x < EPD_7IN5BC_WIDTH; x++) {
       if (MySDCard_ReadPixel() == '1') {
@@ -230,8 +269,8 @@ void drawImage() {
 
 void connectToWifi() {
   while (WiFi.status() != WL_CONNECTED) {
-    //    Serial.println(WiFi.status());
-    //    Serial.println("Wifi connection lost");
+    Serial.println(WiFi.status());
+    Serial.println("Connecting to WIFI");
     if (sizeof(pass) > 0)
       WiFi.begin(ssid, pass);
     else
@@ -239,6 +278,7 @@ void connectToWifi() {
     //    Serial.println("Tried restart");
     delay(10000);
   }
+  Serial.println("Connecting success");
   //start udp and wifi server
   server.begin();
   udp.begin(5005);
@@ -246,19 +286,19 @@ void connectToWifi() {
 
 
 void writeImageToDisplay() {
-  // Serial.println("Write image to screen");
+  Serial.println("Write image to screen");
   EPD_7IN5BC_Display();
   DEV_Delay_ms(2000);
-  // Serial.println("Write image to screen done");
+  Serial.println("Write image to screen done");
 }
 
 void clearDisplay() {
-  // Serial.println("Clear display");
+  Serial.println("Clear display");
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
   Paint_Clear(BLACK);
   EPD_7IN5_Display();
   hasImage = false;
-  // Serial.println("Clear display done");
+  Serial.println("Clear display done");
 }
 
 void sleepDisplay() {
@@ -266,7 +306,7 @@ void sleepDisplay() {
     EPD_7IN5BC_Sleep();
     DEV_Delay_ms(2000);
     sleeping = true;
-    // Serial.println("Display sleeping");
+    Serial.println("Display sleeping");
   }
 }
 
@@ -278,22 +318,22 @@ void wakeUpDisplay() {
     EPD_7IN5BC_Init();
     DEV_Delay_ms(500);
     sleeping = false;;
-    // Serial.println("Display woke up");
+    Serial.println("Display woke up");
   }
 }
 
 
 void printWifiStatus() {
   // print the SSID of the network you're attached to:
-  //  Serial.print("SSID: ");
-  // Serial.println(WiFi.SSID());
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
 
   // print your board's IP address:
   IPAddress ip = WiFi.localIP();
   IPAddress subnet = WiFi.subnetMask();
   broadCast = ip | ~subnet;
-  //  Serial.print("IP Address: ");
-  // Serial.println(ip);
+  Serial.print("IP Address: ");
+  Serial.println(ip);
 
 
   String ipString = ipToString(ip);
@@ -365,7 +405,7 @@ void MySDCard_CloseImage(void)
   // close the file:
   imageFile.flush();
   imageFile.close();
-  // Serial.println("done.");
+  Serial.println("Writing image done.");
 }
 
 String MySDCard_ReadImageLine(int y)
