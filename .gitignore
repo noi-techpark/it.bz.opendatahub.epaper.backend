@@ -2,3 +2,4 @@ e-ink-display/arduino_secrets.h
 *.hex
 .vscode
 e-ink-display/config.h
+build/
