@@ -10,11 +10,11 @@
 #include <SPI.h>
 #include <WiFiNINA.h>
 #include <WiFiUdp.h>
-#include "EPD.h"
-#include "GUI_Paint.h"
-#include "config.h"
+#include <EPD.h>
+#include <GUI_Paint.h>
+#include <EPD_SDCard.h>
 
-#include "EPD_SDCard.h"
+#include "config.h"
 
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = SECRET_SSID;       // your network SSID (name)
@@ -49,6 +49,9 @@ boolean imageRequest = false;
 
 
 void setup() {
+  // For debug only, remove on production to give the Arduino more resources
+  Serial.begin(115200);
+
   DEV_Module_Init();
   EPD_7IN5BC_Init();
   EPD_7IN5BC_Clear();
@@ -430,5 +433,5 @@ char MySDCard_ReadPixel()
   {
     return imageFile.read();
   }
-  return "";
+  return '\0';
 }
