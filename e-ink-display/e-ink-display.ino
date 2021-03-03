@@ -18,7 +18,7 @@
 
 #undef USE_DEBUG
 
-//#define EINK_DEBUG 1
+#define EINK_DEBUG 1
 #if EINK_DEBUG
   #define EINK_INFO 1
 	#define DBG(a) Serial.print(a)
@@ -183,8 +183,10 @@ void loop() {
               imageFile.close();
               imageFile = SD.open(imageName, FILE_WRITE);
               int amount = imageFile.write(bufimg, EPD_7IN5BC_WIDTH);
+              myDelay(5);
               imageFile.close();
-              INFO2(" --> written bytes: ", amount);
+              myDelay(5);
+              INFO3(" --> written bytes: ", amount, NL);
               imageIdx = 0;
               imageDataFlush = false;
               chunkCounter++;
@@ -309,7 +311,7 @@ void udpBroadcast() {
 }
 
 void drawImage(const char *img_id) {
-  INFO("drawImage: START..." NL);
+  INFO(NL "drawImage: START..." NL);
   imageFile.close();
   imageFile = SD.open(img_id);
 
@@ -322,10 +324,10 @@ void drawImage(const char *img_id) {
     // INFO(y);
     if (imageFile.available()) {
       int amount = imageFile.read(bufimg, EPD_7IN5BC_WIDTH);
-      DBG2("We've got data with length = ", amount);
+      DBG3("We've got data with length = ", amount, NL);
     } else {
       int amount = imageFile.read(bufimg, EPD_7IN5BC_WIDTH);
-      DBG2("Not enough data: ", amount);
+      DBG3("Not enough data: ", amount, NL);
       break;
     }
     for (int x = 0; x < EPD_7IN5BC_WIDTH; x++) {
