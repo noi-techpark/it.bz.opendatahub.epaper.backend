@@ -16,16 +16,48 @@
 
 #include "config.h"
 
+#undef USE_DEBUG
+
+//#define EINK_DEBUG 1
+#if EINK_DEBUG
+  #define EINK_INFO 1
+	#define DBG(a) Serial.print(a)
+  #define DBG2(a, b) Serial.print(a); Serial.print(b)
+  #define DBG3(a, b, c) Serial.print(a); Serial.print(b); Serial.print(c)
+#else
+	#define DBG(a)
+  #define DBG2(a, b)
+  #define DBG3(a, b, c)
+#endif
+
+#define EINK_INFO 1
+#if EINK_INFO
+	#define INFO(a) Serial.print(a)
+  #define INFO2(a, b) Serial.print(a); Serial.print(b)
+  #define INFO3(a, b, c) Serial.print(a); Serial.print(b); Serial.print(c)
+#else
+	#define INFO(a)
+  #define INFO2(a, b)
+  #define INFO3(a, b, c)
+#endif
+
+
+#define WIFI_CHECK_REPEATS 3
+#define NL "\r\n"
+
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
-char ssid[] = SECRET_SSID;       // your network SSID (name)
-char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
-char displayName[] = DISPLAY_NAME;
+char ssid[] = SECRET_SSID;          // your network SSID (name)
+char pass[] = SECRET_PASS;          // your network password (use for WPA, or use as key for WEP)
+char displayName[] = DISPLAY_NAME;  // Display name, which must be present already
 
 IPAddress broadCast;
 IPAddress ip;
 
 
 char ipBuff[18];
+int imageIdx = 0;
+char imageName[13] = "12345678.TXT"; // must be a 8.3 notation (uppercase)
+char bufimg[EPD_7IN5BC_WIDTH];
 
 
 boolean connectedToProxy = false;
@@ -43,38 +75,37 @@ boolean hasImage = false;
 
 // current action flags
 boolean content = false;
-boolean stateRequest = false;
-boolean clearRequest = false;
-boolean imageRequest = false;
+boolean imageNameRequest = false;
+boolean imageDataRequest = false;
+boolean imageExists = false;
+boolean imagePrint = false;
 
+long chunkCounter = 0;
 
 void setup() {
-  // For debug only, remove on production to give the Arduino more resources
-  Serial.begin(115200);
-
+  // Start dev mode; enable serial monitor...
   DEV_Module_Init();
-  EPD_7IN5BC_Init();
-  EPD_7IN5BC_Clear();
-  DEV_Delay_ms(500);
-  Serial.println("Display Init done");
+  #undef USE_DEBUG
 
-  SDCard_Init();
-
-
-  // check for the WiFi module:
+  // check for the WiFi module
   if (WiFi.status() == WL_NO_MODULE) {
-    Serial.println("Communication with WiFi module failed!");
-    // don't continue
+    INFO("SETUP: Communication with WiFi module failed! We stop here!" NL);
     while (true);
   }
 
+  INFO("SETUP: Init display...");
+  EPD_7IN5BC_Init();
+  EPD_7IN5BC_Clear();
+  DEV_Delay_ms(500);
+  INFO3("DONE! Name = ", displayName, NL);
+
+  INFO("SETUP: Init SD card...");
+  SDCard_Init();
+  INFO("DONE!" NL);
+
   connectToWifi();
-
-  // you're connected now, so print out the status:
   printWifiStatus();
-
   sleepDisplay();
-
 }
 
 
@@ -82,121 +113,134 @@ void loop() {
 
   // check wifi connection and try to reconnect if lost
   // reset proxy connection flag, to be able to redo the udp broadcast
-  if (WiFi.status() != WL_CONNECTED) {
-
+  if (! wifiCheckStatus(WIFI_CHECK_REPEATS)) {
     connectToWifi();
     connectedToProxy = false;
-
+    myDelay(1000);
   } else {
 
     if (!connectedToProxy && !wifiClient) {
       // send a reply, to the IP address and port that sent us the packet we received
-
       udpBroadcast();
-
-      // delay(5000);
       myDelay(5000);
     }
 
+    // check if client exits from last loop iteration
+    if (!wifiClient) {
+      DBG(".");
+      wifiClient = server.available(); // listen for clients
+      myDelay(1000);
+    }
 
-    if (wifiClient) {
-      // check if client exits from last loop iteration
+    // an http request ends with a blank line
+    boolean currentLineIsBlank = true;
 
-      // an http request ends with a blank line
-      boolean currentLineIsBlank = true;
+    // proxy replies with state request as UDP response
+    // so if a wifiLCinet connects, it means that the display is connected to the proxy
+    // ao we can stop udp server and set connected flag
+    if (!connectedToProxy) {
+      connectedToProxy = true;
+      udp.stop();
+    }
 
+    // to read content (every single bit)
+    char c;
 
-      // proxy replies with state request as UDP response
-      // so if a wifiLCinet connects, it means that the display is connected to the proxy
-      // ao we can stop udp server and set connected flag
-      if (!connectedToProxy) {
-        connectedToProxy = true;
-        udp.stop();
-      }
+    while (wifiClient.available()) {
+      c = wifiClient.read();
 
-
-      // to read content (every single bit)
-      char c;
-
-      int chunkCounter = 0;
-
-      // TODO when using chungs, try read String until 32 (size of chunk)
-
-      while (wifiClient.available()) {
-        c = wifiClient.read();
-
-        if (!content) {
-          if (c == '\n' && currentLineIsBlank) {
-            content = true;
-          }
-          if (c == '\n') {
-            // you're starting a new line
-            currentLineIsBlank = true;
-          } else if (c != '\r') {
-            // you've gotten a character on the current line
-            currentLineIsBlank = false;
-          }
+      if (!content) {
+        DBG("!");
+        if (c == '\n' && currentLineIsBlank) {
+          content = true;
         }
-        else {
-          // image data
-          if  (c == '0' || c == '1') {
-            // first create image file
-            if (!imageRequest)
-            {
-              imageRequest = true;
-              MySDCard_CreateImage();
+        if (c == '\n') {
+          // you're starting a new line
+          currentLineIsBlank = true;
+        } else if (c != '\r') {
+          // you've gotten a character on the current line
+          currentLineIsBlank = false;
+        }
+      } else {
+        // image data
+        if (imageDataRequest) {
+          // INFO3("IDR...imageDataRequest: ", c, NL);
+          if (c == '0' || c == '1') {
+            bufimg[imageIdx] = c;
+            imageIdx++;
+
+            if (imageIdx >= EPD_7IN5BC_WIDTH) {
+              // INFO(bufimg);
+              DBG2("Wrote a line: ", (unsigned long)(chunkCounter / EPD_7IN5BC_WIDTH));
+              imageFile.close();
+              imageFile = SD.open(imageName, FILE_WRITE);
+              int amount = imageFile.write(bufimg, EPD_7IN5BC_WIDTH);
+              imageFile.close();
+              DBG2(" --> written bytes: ", amount);
+              imageIdx = 0;
             }
 
-            // write to image file
-            MySDCard_WriteImagePart(c);
-            myDelay(5);
-
             chunkCounter++;
-            if (chunkCounter == 4096)
+            if (chunkCounter == ((unsigned long)EPD_7IN5BC_WIDTH*EPD_7IN5BC_HEIGHT)) {
+              imageDataRequest = false;
+              imagePrint = true;
+              imageFile.close();
+              INFO("Image written to SD 2!" NL);
               break;
-          }
-          else if (c == '2') // clear screen
-          {
-            clearRequest = true;
-            clearDisplay();
-          }
-          else if (c == '3') // state
-          {
-            stateRequest = true;
-          }
+            }
 
+          } else {
+            imageDataRequest = false;
+            imagePrint = true;
+            INFO2("Wrote a line: ", (unsigned long)(chunkCounter / EPD_7IN5BC_WIDTH));
+            imageFile.close();
+            imageFile = SD.open(imageName, FILE_WRITE);
+            int amount = imageFile.write(bufimg, EPD_7IN5BC_WIDTH);
+            imageFile.close();
+            INFO3(" --> written bytes: ", amount, "Image written to SD!" NL);
+            imageIdx = 0;
+          }
+        } else if (imageNameRequest) {
+          if  (c == '-') {
+            INFO2(NL "IMAGE: imageName = ", imageName);
+            imageExists = SD.exists(imageName);
+            if (imageExists) {
+              imagePrint = true;
+              INFO("...image already exists" NL);
+              break;
+            } else {
+              imageDataRequest = true;
+              imageIdx = 0;
+              chunkCounter = 0;
+              INFO("...image does not exist. Uploading!" NL);
+            }
+            imageNameRequest = false;
+          } else {
+            imageName[imageIdx] = c;
+            imageIdx++;
+          }
+        } else if  (c == '1') { // load image request
+          imageNameRequest = true;
+          imageIdx = 0;
+        } else if (c == '2') {  // clear screen request
+          clearDisplay();
+          sendStateAndReset();
+        } else if (c == '3') {  // state request
+          sendStateAndReset();
         }
+
       }
+    }
 
-      if (!wifiClient.available()) { // check if client has still bytes to send
-
-        // draw image to screen
-        if (imageRequest) {
-          drawImage();
-        }
-        hasImage = true;
-        content = false;
-        stateRequest = false;
-        clearRequest = false;
-        imageRequest = false;
-
-        sendState();
-      } else {
-        wifiClient = server.available(); // listen for clients
-        // delay(2000);
-        myDelay(2000);
-      }
-
-
-    } else {
-      wifiClient = server.available(); // listen for clients
-      // delay(2000);
-      myDelay(2000);
+    // draw image to screen
+    if (imagePrint) {
+      DBG(c);
+      sendStateAndReset();  // FIXME should be afterwards, but otherwise the proxy blocks too long
+      drawImage(imageName);
+      hasImage = true;
     }
   }
 
-
-  // delay(100);
   myDelay(100);
 }
 
@@ -214,8 +258,12 @@ void myDelay(long microSeconds)
   }
 }
 
-void sendState() {
-  // read MAC address
+void sendStateAndReset() {
+  INFO("Send STATE back! Wait for the wifi client to be free...");
+  while (wifiClient.available()) {
+    wifiClient.read();
+  }
+  INFO("OK! Sending...");
   char macBuff[18];
   byte mac[6];
   WiFi.macAddress(mac);
@@ -224,7 +272,17 @@ void sendState() {
   char state[200];
 
   // use placeholders d = displayName, s = sleeping, i = hasImage, b = battery, w = width, h = height, m = mac
-  sprintf(state, "{\"d\": \"%s\" ,\"s\": %s ,\"i\": %s ,\"b\": %i, \"w\": %i,\"h\": %i,\"m\": \"%s\"}", displayName, sleeping ? "true" : "false", hasImage ? "true" : "false", 0, (int)EPD_7IN5BC_WIDTH, (int)EPD_7IN5BC_HEIGHT, macBuff);
+  sprintf(
+    state,
+    "{\"d\": \"%s\" ,\"s\": %s ,\"i\": %s ,\"b\": %i, \"w\": %i,\"h\": %i,\"m\": \"%s\"}",
+    displayName,
+    sleeping ? "true" : "false",
+    hasImage ? "true" : "false",
+    0,
+    (int)EPD_7IN5BC_WIDTH,
+    (int)EPD_7IN5BC_HEIGHT,
+    macBuff
+  );
 
   wifiClient.println("HTTP/1.1 200 OK");
   wifiClient.println("Content-Type: application/json");
@@ -236,9 +294,15 @@ void sendState() {
   wifiClient.println();
   // give the proxy time to receive the data
   delay(2000);
-
   wifiClient.stop();
 
+  // Reset flags and start over...
+  content = false;
+  imageNameRequest = false;
+  imageDataRequest = false;
+  imagePrint = false;
+
+  INFO("Resetting and state transmission: DONE!" NL);
 }
 
 void udpBroadcast() {
@@ -247,61 +311,73 @@ void udpBroadcast() {
   udp.endPacket();
 }
 
-void drawImage() {
-  MySDCard_CloseImage();
+void drawImage(const char *img_id) {
+  INFO("drawImage: START..." NL);
+  imageFile.close();
+  imageFile = SD.open(img_id);
+
   wakeUpDisplay();
-  //  clearDisplay();
-  MySDCard_OpenImage();
-
-
-  Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
+  Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_POSITIVE);
   Paint_Clear(BLACK);
- 
+
+  INFO3("drawImage: Clearing done... printing progress of y axis now! Full height:", EPD_7IN5BC_HEIGHT, NL);
   for (int y = 0; y < EPD_7IN5BC_HEIGHT; y++) {
+    // INFO(y);
+    if (imageFile.available()) {
+      int amount = imageFile.read(bufimg, EPD_7IN5BC_WIDTH);
+      DBG2("We've got data with length = ", amount);
+    } else {
+      int amount = imageFile.read(bufimg, EPD_7IN5BC_WIDTH);
+      DBG2("Not enough data: ", amount);
+      break;
+    }
     for (int x = 0; x < EPD_7IN5BC_WIDTH; x++) {
-      if (MySDCard_ReadPixel() == '1') {
+      if (bufimg[x] == '1') {
         Paint_DrawPoint(x, y, WHITE, DOT_PIXEL_DFT, DOT_STYLE_DFT);
       }
     }
   }
-
   EPD_7IN5BC_Display();
   DEV_Delay_ms(2000);
-  MySDCard_CloseImage();
+  imageFile.close();
+  INFO("drawImage: DONE!" NL);
+}
+
+boolean wifiCheckStatus(int repeats) {
+  for (int i = 0; i < repeats; i++) {
+    if (WiFi.status() == WL_CONNECTED)
+      return true;
+  }
+  return false;
 }
 
 void connectToWifi() {
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.println(WiFi.status());
-    Serial.println("Connecting to WIFI");
+  if (wifiCheckStatus(WIFI_CHECK_REPEATS)) {
+    INFO("WIFI: Already connected..." NL);
+    return;
+  }
+  while (! wifiCheckStatus(WIFI_CHECK_REPEATS)) {
+    INFO2("WIFI: Connecting... Status = ", WiFi.status());
     if (sizeof(pass) > 0)
       WiFi.begin(ssid, pass);
     else
       WiFi.begin(ssid);
-    //    Serial.println("Tried restart");
     delay(10000);
   }
-  Serial.println("Connecting success");
-  //start udp and wifi server
+  INFO(" ...Connected!" NL);
+  INFO("Starting UDP and WIFI server");
   server.begin();
   udp.begin(5005);
-}
-
-
-void writeImageToDisplay() {
-  Serial.println("Write image to screen");
-  EPD_7IN5BC_Display();
-  DEV_Delay_ms(2000);
-  Serial.println("Write image to screen done");
+  INFO(" ...DONE!" NL);
 }
 
 void clearDisplay() {
-  Serial.println("Clear display");
-  Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
-  Paint_Clear(BLACK);
-  EPD_7IN5_Display();
+  INFO("Clear display: START" NL);
+  wakeUpDisplay();
+  EPD_7IN5BC_Clear();
+  sleepDisplay();
   hasImage = false;
-  Serial.println("Clear display done");
+  INFO("Clear display: DONE!" NL);
 }
 
 void sleepDisplay() {
@@ -309,129 +385,37 @@ void sleepDisplay() {
     EPD_7IN5BC_Sleep();
     DEV_Delay_ms(2000);
     sleeping = true;
-    Serial.println("Display sleeping");
+    INFO("Display sleeping");
   }
 }
-
-
 
 void wakeUpDisplay() {
   if (sleeping) {
     DEV_Module_Init();
     EPD_7IN5BC_Init();
     DEV_Delay_ms(500);
-    sleeping = false;;
-    Serial.println("Display woke up");
+    sleeping = false;
+    INFO("Display woke up");
   }
 }
 
-
 void printWifiStatus() {
-  // print the SSID of the network you're attached to:
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
-
-  // print your board's IP address:
   IPAddress ip = WiFi.localIP();
   IPAddress subnet = WiFi.subnetMask();
   broadCast = ip | ~subnet;
-  Serial.print("IP Address: ");
-  Serial.println(ip);
 
+  INFO2("SSID: ", WiFi.SSID());
+  INFO3("; IP Address: ", ip, NL);
 
-  String ipString = ipToString(ip);
+  String ipString = "";
+  for (int i = 0; i < 4; i++) {
+    ipString += i  ? "." + String(ip[i]) : String(ip[i]);
+  }
   ipString.toCharArray(ipBuff, ipString.length() + 1);
-
 
   Paint_NewImage(IMAGE_BW, EPD_7IN5_WIDTH, EPD_7IN5_HEIGHT, IMAGE_ROTATE_0, IMAGE_COLOR_INVERTED);
   Paint_Clear(BLACK);
-
-  Paint_DrawString_EN(200, 160, "Connecting...", &Font24, BLACK, WHITE);
+  Paint_DrawString_EN(200, 160, "Connected!", &Font24, BLACK, WHITE);
   Paint_DrawString_EN(200, 260, ipBuff, &Font24, BLACK, WHITE);
-
   EPD_7IN5BC_Display();
-}
-
-String ipToString(IPAddress ip) {
-  String s = "";
-  for (int i = 0; i < 4; i++) {
-    s += i  ? "." + String(ip[i]) : String(ip[i]);
-  }
-  return s;
-}
-
-
-void MySDCard_CreateImage(void) {
-  // open the file. note that only one file can be open at a time,
-  // so you have to close this one before opening another.
-  if (SD.exists("IMAGE.TXT"))
-  {
-    //    DEBUG("DELETE FILE!\n");
-    SD.remove("IMAGE.TXT");
-  }
-  while (SD.exists("IMAGE.TXT"))
-    ;
-  imageFile = SD.open("IMAGE.TXT", FILE_WRITE);
-
-  //  DEBUG("FILE OPEN!\n");
-}
-
-void MySDCard_OpenImage(void)
-{
-  // open the file. note that only one file can be open at a time,
-  // so you have to close this one before opening another.
-  imageFile = SD.open("IMAGE.TXT");
-
-  //  DEBUG("FILE OPEN!\n");
-}
-
-void MySDCard_WriteImagePart(const char part)
-{
-  // if the file opened okay, write to it:
-  if (imageFile)
-  {
-    // Serial.print("Writing to test.txt...");
-    imageFile.print(part);
-  }
-  else
-  {
-    // if the file didn't open, print an error:
-    // Serial.println("error opening test.txt");
-  }
-
-  //   DEBUG("WRITING PART!\n");
-}
-
-void MySDCard_CloseImage(void)
-{
-
-  // close the file:
-  imageFile.flush();
-  imageFile.close();
-  Serial.println("Writing image done.");
-}
-
-String MySDCard_ReadImageLine(int y)
-{
-  while (y > -1 && imageFile.available())
-  {
-    if (y == 0)
-    {
-      String line = imageFile.readStringUntil('\n');
-      // line.replace(",", "");
-      // DEBUG(line);
-      return line;
-    }
-    y--;
-  }
-  return "";
-}
-
-char MySDCard_ReadPixel()
-{
-  if (imageFile.available())
-  {
-    return imageFile.read();
-  }
-  return '\0';
 }
