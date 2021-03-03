@@ -328,7 +328,8 @@ void drawImage(const char *img_id) {
     // INFO(y);
     if (imageFile.available()) {
       int amount = imageFile.read(bufimg, EPD_7IN5BC_WIDTH);
-      DBG3("We've got data with length = ", amount, NL);
+      DBG2("We've got data for line #", y);
+      DBG3(" with length = ", amount, NL);
     } else {
       int amount = imageFile.read(bufimg, EPD_7IN5BC_WIDTH);
       DBG3("Not enough data: ", amount, NL);
