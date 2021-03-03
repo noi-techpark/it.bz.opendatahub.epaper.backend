@@ -154,10 +154,7 @@ void loop() {
       c = wifiClient.read();
 
       if (!content) {
-        if (loopCounter >= 10) {
-          DBG("!");
-          loopCounter = 0;
-        }
+        DBG("!");
         if (c == '\n' && currentLineIsBlank) {
           content = true;
         }
