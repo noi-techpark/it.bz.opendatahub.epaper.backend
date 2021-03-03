@@ -13,8 +13,6 @@ Code for Arduino UNO WIFI rev.2 Board to show images from the
 can be controlled with the
 [e-ink-displays-webapp](https://github.com/noi-techpark/e-ink-displays-webapp).
 
-<!-- START doctoc generated TOC please keep comment here to allow auto update -->
-<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**
 
 - [e-ink-displays-backend](#e-ink-displays-backend)
@@ -27,9 +25,14 @@ can be controlled with the
     - [SD Card](#sd-card)
     - [Auto connect to API with proxy](#auto-connect-to-api-with-proxy)
     - [Connect with no proxy](#connect-with-no-proxy)
-    - [Troubleshoot](#troubleshoot)
-
-<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+  - [Troubleshoot](#troubleshoot)
+    - [Permission denied, cannot open /dev/ttyACM0](#permission-denied-cannot-open-devttyacm0)
+  - [Flight Rules](#flight-rules)
+    - [arduino-cli](#arduino-cli)
+    - [Uploading compiled code](#uploading-compiled-code)
+    - [Debugging serial communication](#debugging-serial-communication)
+    - [Missing SD.h](#missing-sdh)
+    - [Warning: Device or resource busy](#warning-device-or-resource-busy)
 
 ## Requirements
 
@@ -102,8 +105,88 @@ display. Then you can create or edit with the webapp a connection and set the
 corresponding IP address. The you can send the image with the web app by
 clicking on send, and the display should recive the image within minutes.
 
-### Troubleshoot
+## Troubleshoot
 If the proxy doesn't show any connection after some minutes, check if firewall
 of machine where proxy is running has ingoing traffic allowed and that proxy and
 the displays are in the same WIFI network. The incoming traffic needs to be
 allowed because of UDP broadcasting.
+
+### Permission denied, cannot open /dev/ttyACM0
+
+1) sudo usermod -a -G dialout $USER
+2) Logout/login again + re-plug the Arduino
+
+Better way: /opt/arduino-1.8.9/arduino-linux-setup.sh pemoser
+
+sudo /opt/arduino-1.8.9/install.sh for IDE desktop files
+
+
+## Flight Rules
+
+### arduino-cli
+
+Install it:
+```
+wget https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Linux_64bit.tar.gz 
+tar xvzf arduino-cli_latest_Linux_64bit.tar.gz
+sudo mv arduino-cli /usr/bin/
+arduino-cli completion bash > arduino-cli-completion.sh
+sudo mv arduino-cli-completion.sh /usr/share/bash-completion/completions/arduino-cli
+. /usr/share/bash-completion/completions/arduino-cli
+arduino-cli config init
+arduino-cli core update-index
+arduino-cli board listall
+```
+
+Now install the Arduino Board you use:
+```
+arduino-cli core search "Arduino Uno WiFi Rev2"
+arduino-cli core install "arduino:megaavr"
+```
+
+Copy libraries/EPD to ~/Arduino/libraries, since it is not the one, installable from arduino.cc
+
+List the connected board
+```
+arduino-cli board list
+```
+
+
+Compiling the sketch using the command line
+```
+arduino-cli compile --fqbn arduino:megaavr:uno2018 e-ink-display
+```
+
+...add `--upload` if you want to upload it immediately; `-p /dev/ttyACM1` if it is not the default port:
+```
+arduino-cli compile --upload -p /dev/ttyACM0 --fqbn arduino:megaavr:uno2018 e-ink-display
+```
+
+
+...or just verifying with:
+```
+arduino-cli compile --verify --fqbn arduino:megaavr:uno2018 e-ink-display
+```
+
+### Uploading compiled code
+
+With this we can upload to more than one Arduino:
+```
+arduino-cli upload -p /dev/ttyACM1 --fqbn arduino:megaavr:uno2018 e-ink-display
+```
+
+### Debugging serial communication
+
+`sudo apt install gtkterm`
+or 
+`sudo apt install minicom`
+
+### Missing SD.h
+
+arduino-cli lib install SD
+
+### Warning: Device or resource busy 
+
+`Warning: avrdude: usbdev_open(): WARNING: failed to set configuration 1: Device or resource busy`
+
+apt purge modemmanager
