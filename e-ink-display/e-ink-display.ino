@@ -59,7 +59,6 @@ int imageIdx = 0;
 char imageName[13] = "12345678.TXT"; // must be a 8.3 notation (uppercase)
 char bufimg[EPD_7IN5BC_WIDTH];
 
-
 boolean connectedToProxy = false;
 
 WiFiUDP udp;
@@ -67,7 +66,6 @@ WiFiServer server(80);
 WiFiClient wifiClient;
 
 File imageFile;
-
 
 // state flags
 boolean sleeping = false;
@@ -82,6 +80,7 @@ boolean imageExists = false;
 boolean imagePrint = false;
 
 long chunkCounter = 0;
+int loopCounter = 0;
 
 void setup() {
   // Start dev mode; enable serial monitor...
@@ -111,6 +110,8 @@ void setup() {
 
 void loop() {
 
+  loopCounter++;
+
   // check wifi connection and try to reconnect if lost
   // reset proxy connection flag, to be able to redo the udp broadcast
   if (! wifiCheckStatus(WIFI_CHECK_REPEATS)) {
@@ -127,7 +128,10 @@ void loop() {
 
     // check if client exits from last loop iteration
     if (!wifiClient) {
-      DBG(".");
+      if (loopCounter >= 10) {
+        DBG(".");
+        loopCounter = 0;
+      }
       wifiClient = server.available(); // listen for clients
       myDelay(1000);
     }
@@ -150,7 +154,10 @@ void loop() {
       c = wifiClient.read();
 
       if (!content) {
-        DBG("!");
+        if (loopCounter >= 10) {
+          DBG("!");
+          loopCounter = 0;
+        }
         if (c == '\n' && currentLineIsBlank) {
           content = true;
         }
