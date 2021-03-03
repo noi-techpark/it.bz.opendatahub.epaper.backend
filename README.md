@@ -18,9 +18,6 @@ can be controlled with the
 - [e-ink-displays-backend](#e-ink-displays-backend)
   - [Requirements](#requirements)
   - [Setup](#setup)
-    - [WPA](#wpa)
-    - [OPEN WIFI - NO PASSWORD](#open-wifi---no-password)
-    - [Predefined display name](#predefined-display-name)
     - [Upload](#upload)
     - [SD Card](#sd-card)
     - [Auto connect to API with proxy](#auto-connect-to-api-with-proxy)
@@ -53,31 +50,17 @@ can be controlled with the
 
 
 ## Setup
-Put SSID of Network you want to conncect to arduino_secrets.h
+Copy `config.h.dist` to `config.h`, and fill values in:
+
+If you want to connect automatically to an existing display, put the exact
+display Name you can see in the Webapp. Important: It must already exist in the
+Webapp! 
+
 ```c
 #define SECRET_SSID "YOUR_SSID"
-``` 
-
-Depending on the security of the Wifi you want to connect change following lines
-of code
-
-### WPA
-Add the password to config.h
-```
-#define SECRET_PASS "YOUR_PASSWORD"
-```
-### OPEN WIFI - NO PASSWORD
-Leave SECRET_PASS empty in config.h
-```
-#define SECRET_PASS ""
-```
-
-### Predefined display name
-If you want to connect automatically to an existing display, put the exact
-display Name you can see in the Webapp to config.h file. example:
-```
+#define SECRET_PASS "YOUR_PASSWORD" // empty, if no password
 #define DISPLAY_NAME "Seminar 2 Display"
-```
+``` 
 
 ### Upload
 Now you can upload the code to your Arduino Board. Set Serial Monitor BAUD Rate
@@ -116,10 +99,8 @@ allowed because of UDP broadcasting.
 1) sudo usermod -a -G dialout $USER
 2) Logout/login again + re-plug the Arduino
 
-Better way: /opt/arduino-1.8.9/arduino-linux-setup.sh pemoser
-
-sudo /opt/arduino-1.8.9/install.sh for IDE desktop files
-
+Better way: `/opt/arduino-1.8.9/arduino-linux-setup.sh <your-user>`
+`sudo /opt/arduino-1.8.9/install.sh` for IDE desktop files
 
 ## Flight Rules
 
