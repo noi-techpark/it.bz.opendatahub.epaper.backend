@@ -77,6 +77,7 @@ boolean hasImage = false;
 boolean content = false;
 boolean imageNameRequest = false;
 boolean imageDataRequest = false;
+boolean imageDataFlush = false;
 boolean imageExists = false;
 boolean imagePrint = false;
 
@@ -93,15 +94,14 @@ void setup() {
     while (true);
   }
 
-  INFO("SETUP: Init display...");
+  INFO(NL "SETUP: Init display..." NL);
   EPD_7IN5BC_Init();
   EPD_7IN5BC_Clear();
   DEV_Delay_ms(500);
-  INFO3("DONE! Name = ", displayName, NL);
+  INFO3(NL "DONE! Name = ", displayName, NL);
 
-  INFO("SETUP: Init SD card...");
+  INFO(NL "SETUP: Init SD card...");
   SDCard_Init();
-  INFO("DONE!" NL);
 
   connectToWifi();
   printWifiStatus();
@@ -168,38 +168,35 @@ void loop() {
           if (c == '0' || c == '1') {
             bufimg[imageIdx] = c;
             imageIdx++;
-
             if (imageIdx >= EPD_7IN5BC_WIDTH) {
+              imageDataFlush = true;
+            }
+          } else {
+            imageDataRequest = false;
+            imagePrint = true;
+            imageDataFlush = true;
+          }
+
+          if (imageDataFlush) {
               // INFO(bufimg);
-              DBG2("Wrote a line: ", (unsigned long)(chunkCounter / EPD_7IN5BC_WIDTH));
+              INFO2("Writing line #", chunkCounter);
               imageFile.close();
               imageFile = SD.open(imageName, FILE_WRITE);
               int amount = imageFile.write(bufimg, EPD_7IN5BC_WIDTH);
               imageFile.close();
-              DBG2(" --> written bytes: ", amount);
+              INFO2(" --> written bytes: ", amount);
               imageIdx = 0;
-            }
+              imageDataFlush = false;
+              chunkCounter++;
+          }
 
-            chunkCounter++;
-            if (chunkCounter == ((unsigned long)EPD_7IN5BC_WIDTH*EPD_7IN5BC_HEIGHT)) {
+          if (chunkCounter >= EPD_7IN5BC_HEIGHT) {
               imageDataRequest = false;
               imagePrint = true;
-              imageFile.close();
-              INFO("Image written to SD 2!" NL);
+              imageDataFlush = true;
               break;
-            }
-
-          } else {
-            imageDataRequest = false;
-            imagePrint = true;
-            INFO2("Wrote a line: ", (unsigned long)(chunkCounter / EPD_7IN5BC_WIDTH));
-            imageFile.close();
-            imageFile = SD.open(imageName, FILE_WRITE);
-            int amount = imageFile.write(bufimg, EPD_7IN5BC_WIDTH);
-            imageFile.close();
-            INFO3(" --> written bytes: ", amount, "Image written to SD!" NL);
-            imageIdx = 0;
           }
+
         } else if (imageNameRequest) {
           if  (c == '-') {
             INFO2(NL "IMAGE: imageName = ", imageName);
