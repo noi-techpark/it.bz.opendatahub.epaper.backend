@@ -1,0 +1,16 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: it.bz.opendatahub.epaper.backend
+Upstream-Contact: NOI Techpark <digital@noi.bz.it>
+Source: https://github.com/noi-techpark/it.bz.opendatahub.epaper.backend
+
+Files: .gitignore e-ink-display/config.h.dist
+Copyright: (c) NOI Techpark <digital@noi.bz.it>
+License: CC0-1.0
+
+Files: libraries/EPD/*
+Copyright: Asuki Kono
+License: MIT
+
+Files: libraries/WiFiNINA/*
+Copyright: Arduino <info@arduino.cc>
+License: LGPL-2.1-or-later
